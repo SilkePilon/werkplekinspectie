@@ -187,3 +187,25 @@ export function createSeenIds(ttlMs: number, now: () => number): SeenIds {
     },
   };
 }
+
+export interface ConcurrencyGate {
+  /** Takes a slot if fewer than `max` are in use; returns the function that frees it (once). */
+  enter(): (() => void) | undefined;
+}
+
+/** At most `max` holders at a time; a freed slot is reusable at once. */
+export function createConcurrencyGate(max: number): ConcurrencyGate {
+  let active = 0;
+  return {
+    enter() {
+      if (active >= max) return undefined;
+      active += 1;
+      let freed = false;
+      return () => {
+        if (freed) return;
+        freed = true;
+        active -= 1;
+      };
+    },
+  };
+}

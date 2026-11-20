@@ -55,12 +55,14 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           resources:
+            # Een inzending van 11 MB kost ongeveer 50 MB geheugen; de server verwerkt er
+            # maximaal 2 tegelijk (daarna 429), met ruimte voor pieken in pdfkit.
             requests:
               cpu: 100m
-              memory: 128Mi
+              memory: 192Mi
             limits:
               cpu: 500m
-              memory: 384Mi
+              memory: 768Mi
           readinessProbe:
             httpGet:
               path: /healthz

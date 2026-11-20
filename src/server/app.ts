@@ -19,6 +19,7 @@ import type { Mailer } from './mail/send.js';
 import { renderInspectionPdf } from './pdf/render.js';
 import {
   clientKey,
+  createConcurrencyGate,
   createGlobalLimiter,
   createSeenIds,
   honeypot,
@@ -42,6 +43,13 @@ export interface AppDeps {
 }
 
 const SEEN_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Submissions processed at the same time. One 11 MB submission takes about 50 MB of memory
+ * (body, decoded photos, PDF); the pod has 768Mi.
+ */
+const MAX_CONCURRENT_SUBMITS = 2;
+/** Processing takes seconds, so a busy server is soon free again. */
+const BUSY_RETRY_AFTER_S = 10;
 const PHOTO_MAX_PX = 2000;
 const SIGNATURE_MAX = { width: 2400, height: 1600 };
 const INDEX_HTML = 'index.html';
@@ -159,6 +167,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
   const globalLimit = createGlobalLimiter(cfg.rateLimit.globalPerHour, () => now().getTime());
   // Sends that are still running, so a double tap waits for the first instead of mailing twice.
   const inFlight = new Map<string, Promise<void>>();
+  const submitGate = createConcurrencyGate(MAX_CONCURRENT_SUBMITS);
 
   const app = Fastify({
     logger: deps.logStream ? loggerOptions(deps.logStream) : false,
@@ -183,10 +192,22 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
   });
 
   // Hook order on the submit route: origin guard (all non-GET /api/ requests), then
-  // content type, per-IP limit, global limit, honeypot, and finally the handler.
+  // content type, per-IP limit, concurrency cap, global limit, honeypot, and finally the handler.
   await securityHeaders(app);
   app.addHook('onRequest', originGuard(cfg.publicOrigin));
   await app.register(rateLimit, { global: false });
+
+  // Before the body is read, and before the global limit so a busy refusal costs no budget.
+  // The slot is freed when the response is closed: sent, failed, or the client went away.
+  const takeSubmitSlot: preParsingHookHandler = async (_req, reply, payload) => {
+    const leave = submitGate.enter();
+    if (leave === undefined) {
+      reply.header('retry-after', BUSY_RETRY_AFTER_S);
+      throw tooMany();
+    }
+    reply.raw.once('close', leave);
+    return payload;
+  };
 
   // Runs before the body is read, and only for requests the per-IP limit let through.
   const takeGlobalSlot: preParsingHookHandler = async (_req, reply, payload) => {
@@ -215,7 +236,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
     bodyLimit: LIMITS.bodyBytes,
     // @fastify/rate-limit appends its own onRequest hook after this one.
     onRequest: requireJson,
-    preParsing: takeGlobalSlot,
+    preParsing: [takeSubmitSlot, takeGlobalSlot],
     preValidation: honeypot,
     config: {
       rateLimit: {

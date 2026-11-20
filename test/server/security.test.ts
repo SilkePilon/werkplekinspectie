@@ -300,6 +300,75 @@ describe('global limit', () => {
   });
 });
 
+describe('concurrent submissions', () => {
+  /** A renderer that holds every call until `release()`, counting the calls that started. */
+  function heldRenderer() {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const renderPdf = vi.fn<typeof renderInspectionPdf>(async () => {
+      await gate;
+      return Buffer.from('%PDF-1.4 stub');
+    });
+    return { renderPdf, release };
+  }
+
+  test('a 3rd submission while 2 are being processed gives 429 te_veel with retry-after', async () => {
+    const held = heldRenderer();
+    const { app, mailer } = await setup({}, { renderPdf: held.renderPdf });
+
+    const first = post(app, { cf: '198.51.100.1' });
+    const second = post(app, { cf: '198.51.100.2' });
+    await vi.waitFor(() => expect(held.renderPdf).toHaveBeenCalledTimes(2));
+
+    const third = await post(app, { cf: '198.51.100.3' });
+    expect(third.statusCode).toBe(429);
+    expect(third.json()).toEqual({ status: 'te_veel' });
+    expect(Number(third.headers['retry-after'])).toBeGreaterThan(0);
+    expect(held.renderPdf).toHaveBeenCalledTimes(2);
+
+    held.release();
+    expect((await first).statusCode).toBe(200);
+    expect((await second).statusCode).toBe(200);
+    expect(mailer.sent).toHaveLength(2);
+
+    // The slots are free again.
+    expect((await post(app, { cf: '198.51.100.3' })).statusCode).toBe(200);
+  });
+
+  test('a submission refused for being busy does not use up the global budget', async () => {
+    const held = heldRenderer();
+    const { app } = await setup({ RATE_LIMIT_GLOBAL_PER_HOUR: '3' }, { renderPdf: held.renderPdf });
+    const running = [post(app, { cf: '198.51.100.1' }), post(app, { cf: '198.51.100.2' })];
+    await vi.waitFor(() => expect(held.renderPdf).toHaveBeenCalledTimes(2));
+    expect((await post(app, { cf: '198.51.100.3' })).statusCode).toBe(429);
+    held.release();
+    await Promise.all(running);
+    expect((await post(app, { cf: '198.51.100.4' })).statusCode).toBe(200);
+  });
+
+  test('refused and failed requests give their slot back', async () => {
+    const { app, renderPdf } = await setup();
+    for (let i = 0; i < 3; i++) {
+      expect((await post(app, { cf: `198.51.100.${10 + i}`, body: '{"kapot": ' })).statusCode).toBe(400);
+    }
+    for (let i = 0; i < 2; i++) {
+      renderPdf.mockRejectedValueOnce(new Error('stuk'));
+      expect((await post(app, { cf: `198.51.100.${20 + i}` })).statusCode).toBe(500);
+    }
+    expect((await post(app, { cf: '198.51.100.30' })).statusCode).toBe(200);
+  });
+
+  test('GET routes are not limited by the submit cap', async () => {
+    const held = heldRenderer();
+    const { app } = await setup({}, { renderPdf: held.renderPdf });
+    const running = [post(app, { cf: '198.51.100.1' }), post(app, { cf: '198.51.100.2' })];
+    await vi.waitFor(() => expect(held.renderPdf).toHaveBeenCalledTimes(2));
+    expect((await app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
+    held.release();
+    await Promise.all(running);
+  });
+});
+
 describe('origin guard', () => {
   test.each([
     ['a foreign Origin', { origin: 'https://evil.example.com' }],
