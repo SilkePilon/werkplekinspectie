@@ -22,6 +22,11 @@ export interface QuestionScreenProps {
 
 /** Long enough to see the selected state, short enough not to feel slow. */
 const ADVANCE_MS = 300;
+/**
+ * Taps on the answers are ignored this long after the question appears: the second half of a
+ * double tap (on Ja, Verder gaan or Start) must not answer the next question by accident.
+ */
+const TAP_GUARD_MS = 300;
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -44,10 +49,18 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: Questio
     timer.current = undefined;
   };
   useEffect(() => cancelAdvance, []);
+  const settled = useRef(false);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      settled.current = true;
+    }, TAP_GUARD_MS);
+    return () => clearTimeout(t);
+  }, []);
 
   if (!question || !section) throw new Error(`Onbekende vraag ${id}`);
 
   function answer(v: AnswerValue) {
+    if (!settled.current) return;
     dispatch({ type: 'answer', id, value: v });
     cancelAdvance();
     if (v === 'nee') {
@@ -116,11 +129,16 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: Questio
         photosElsewhere={photosElsewhere}
         onChange={(d) => dispatch({ type: 'neeDetails', id, details: d })}
         onAddPhoto={(url) =>
-          dispatch((current) => ({
-            type: 'neeDetails',
-            id,
-            details: { photos: [...(current.nee[id]?.photos ?? []), url].slice(0, LIMITS.photosPerItem) },
-          }))
+          // Compression can finish after the answer was changed away from Nee: drop the photo then.
+          dispatch((current) =>
+            current.answers[id] === 'nee'
+              ? {
+                  type: 'neeDetails',
+                  id,
+                  details: { photos: [...(current.nee[id]?.photos ?? []), url].slice(0, LIMITS.photosPerItem) },
+                }
+              : null,
+          )
         }
         onDone={() => {
           setSheetOpen(false);

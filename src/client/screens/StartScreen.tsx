@@ -88,14 +88,17 @@ export function StartScreen({
         {rememberedName && !editName ? (
           <div className="mt-2.5 mb-1 flex items-center justify-between gap-3">
             <p className="m-0 text-[30px] font-black leading-[1.1]">Hoi {rememberedName}!</p>
-            <ChunkyButton
-              variant="ghost"
-              className="min-h-11 w-auto px-2"
-              aria-label="Naam aanpassen"
-              onClick={() => setEditName(true)}
-            >
-              Aanpassen
-            </ChunkyButton>
+            {/* The name belongs to a new inspection; the open draft keeps its own. */}
+            {!draft && (
+              <ChunkyButton
+                variant="ghost"
+                className="min-h-11 w-auto px-2"
+                aria-label="Naam aanpassen"
+                onClick={() => setEditName(true)}
+              >
+                Aanpassen
+              </ChunkyButton>
+            )}
           </div>
         ) : null}
 

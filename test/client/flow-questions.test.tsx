@@ -78,9 +78,15 @@ const allJaExcept = (...skip: QuestionId[]) =>
     Record<QuestionId, AnswerValue>
   >;
 
+/** Answer taps are ignored for 300ms after a question appears (double-tap guard). */
+async function settle() {
+  await tick(300);
+}
+
 async function resume(user: ReturnType<typeof setup>) {
   render(<App />);
   await user.click(await screen.findByRole('button', { name: 'Verder gaan' }));
+  await settle();
 }
 
 async function fillStart(user: ReturnType<typeof setup>) {
@@ -106,6 +112,7 @@ describe('question flow', () => {
     expect(screen.getByRole('progressbar', { name: 'Vraag 1 van 21' })).toBeTruthy();
     expect(screen.getByText('Instructie')).toBeTruthy();
 
+    await settle();
     await user.click(screen.getByText('Ja'));
     expect(radio('Ja').checked).toBe(true);
     expect(screen.getByText(Q1A)).toBeTruthy();
@@ -113,6 +120,7 @@ describe('question flow', () => {
     expect(screen.getByText(Q1B)).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Vraag 2 van 21' })).toBeTruthy();
 
+    await settle();
     await user.click(screen.getByText('Nee'));
     const dialog = neeDialog();
     await user.click(button('Doorgaan', dialog));
@@ -173,7 +181,7 @@ describe('question flow', () => {
     expect(neeDialog()).toBeTruthy();
   });
 
-  test('with reduced motion Ja advances at once', async () => {
+  test('with reduced motion Ja advances at once; a double tap does not answer the next question', async () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn((query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' })),
@@ -183,6 +191,39 @@ describe('question flow', () => {
     await resume(user);
     await user.click(screen.getByText('Ja'));
     expect(screen.getByText(Q1B)).toBeTruthy();
+    // The second tap of the double tap lands on 1B's Ja.
+    await user.click(screen.getByText('Ja'));
+    expect(screen.getByText(Q1B)).toBeTruthy();
+    expect(screen.getAllByRole('radio').some((r) => (r as HTMLInputElement).checked)).toBe(false);
+
+    await settle();
+    await user.click(screen.getByText('Ja'));
+    expect(screen.getByText(Q1C)).toBeTruthy();
+    await tick(300);
+    await waitFor(async () => expect((await loadDraft())?.answers).toEqual({ '1A': 'ja', '1B': 'ja' }));
+  });
+
+  test('a failed save shows a lasting alert until a save works again', async () => {
+    const user = setup();
+    await seed({});
+    await resume(user);
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementationOnce(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    });
+    await user.click(screen.getByText('Ja'));
+    await tick(300);
+    const message = 'Opslaan lukt niet. Je telefoon heeft te weinig ruimte. Verwijder een foto.';
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(message);
+    expect(screen.getByText(Q1B)).toBeTruthy();
+    await tick(1000);
+    expect(screen.getByText(message)).toBeTruthy();
+
+    await user.click(screen.getByText('Ja'));
+    await tick(300);
+    await waitFor(() => expect(screen.queryByText(message)).toBeNull());
+    expect((await loadDraft())?.answers).toEqual({ '1A': 'ja', '1B': 'ja' });
+    put.mockRestore();
   });
 
   test('Volgende moves on from an answered question; X goes to start and keeps the draft', async () => {
@@ -278,6 +319,7 @@ describe('question flow', () => {
       dispatchEvent(new PopStateEvent('popstate', { state }));
     });
     expect(screen.getByText('Zijn de blusmiddelen gekeurd?')).toBeTruthy();
+    await settle();
     await user.click(screen.getByText('Niet van toepassing'));
     await tick(300);
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
@@ -359,6 +401,22 @@ describe('photos', () => {
     expect(within(dialog).queryByText(/Maximaal/)).toBeNull();
   });
 
+  test('a photo that finishes after the answer changed away from Nee is dropped', async () => {
+    let finish: (url: string) => void = () => undefined;
+    vi.mocked(compressPhoto).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const user = setup();
+    await seed({});
+    const { input } = await openSheet(user);
+    await user.upload(input, file());
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByText('Ja'));
+    await act(async () => finish(PHOTO));
+    await tick(300);
+    expect(screen.getByText(Q1B)).toBeTruthy();
+    await waitFor(async () => expect((await loadDraft())?.answers).toEqual({ '1A': 'ja' }));
+    expect((await loadDraft())?.nee['1A']?.photos ?? []).toEqual([]);
+  });
+
   test('a photo that cannot be used shows the reason', async () => {
     vi.mocked(compressPhoto).mockRejectedValue(new PhotoError());
     const user = setup();
@@ -436,7 +494,11 @@ describe('start screen', () => {
   test('Weggooien asks first, then removes the draft', async () => {
     const user = setup();
     await seed({ '1A': 'ja' });
+    await setRememberedName('J. Jansen');
     render(<App />);
+    expect(await screen.findByText('Hoi J. Jansen!')).toBeTruthy();
+    // Changing the name only matters for a new inspection.
+    expect(screen.queryByRole('button', { name: 'Naam aanpassen' })).toBeNull();
     await user.click(await screen.findByRole('button', { name: 'Weggooien' }));
     const dialog = screen.getByRole('dialog', { name: 'Inspectie weggooien?' });
     await user.click(button('Terug', dialog));
@@ -447,6 +509,7 @@ describe('start screen', () => {
     await user.click(button('Weggooien', screen.getByRole('dialog', { name: 'Inspectie weggooien?' })));
     expect(screen.queryByText('Je bent nog bezig met een inspectie')).toBeNull();
     expect(screen.getByRole('button', { name: 'Start inspectie' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Naam aanpassen' })).toBeTruthy();
     await waitFor(async () => expect(await loadDraft()).toBeNull());
   });
 

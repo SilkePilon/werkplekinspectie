@@ -31,6 +31,13 @@ describe('compressPhoto', () => {
     expect((err as PhotoError).message).toBe('Deze foto kan niet gebruikt worden. Maak een nieuwe foto.');
   });
 
+  test('a result above the 1.5 MB photo limit is rejected', async () => {
+    compress.mockResolvedValue(new File([new Uint8Array(1_500_001)], 'x.jpg', { type: 'image/jpeg' }));
+    await expect(compressPhoto(input)).rejects.toBeInstanceOf(PhotoError);
+    compress.mockResolvedValue(new File([new Uint8Array(1_500_000)], 'x.jpg', { type: 'image/jpeg' }));
+    await expect(compressPhoto(input)).resolves.toMatch(/^data:image\/jpeg;base64,/);
+  });
+
   test('a result that is not a JPEG is rejected as well', async () => {
     compress.mockResolvedValue(new File(['<svg/>'], 'x.svg', { type: 'image/svg+xml' }));
     await expect(compressPhoto(input)).rejects.toBeInstanceOf(PhotoError);

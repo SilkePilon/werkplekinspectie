@@ -1,5 +1,6 @@
 // Shrinks a photo on the phone before it goes into the draft: max 1600px, JPEG at quality 0.7.
 import imageCompression from 'browser-image-compression';
+import { LIMITS } from '@shared/schema';
 
 const MESSAGE = 'Deze foto kan niet gebruikt worden. Maak een nieuwe foto.';
 
@@ -30,6 +31,8 @@ export async function compressPhoto(file: File): Promise<string> {
       fileType: 'image/jpeg',
       useWebWorker: true,
     });
+    // The server refuses larger photos; better to say so now than at sending time.
+    if (blob.size > LIMITS.photoBytes) throw new PhotoError();
     url = await toDataUrl(blob);
   } catch {
     throw new PhotoError();

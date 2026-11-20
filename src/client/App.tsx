@@ -21,8 +21,11 @@ export type Screen =
   | { name: 'summary' }
   | { name: 'signature' };
 
-/** An action, or a function that builds one from the draft as it is at that moment (for async work). */
-export type DraftDispatch = (update: DraftAction | ((d: Draft) => DraftAction)) => void;
+/**
+ * An action, or a function that builds one from the draft as it is at that moment (for async
+ * work); that function may return null to drop the change.
+ */
+export type DraftDispatch = (update: DraftAction | ((d: Draft) => DraftAction | null)) => void;
 
 const START: Screen = { name: 'start' };
 const AUTOSAVE_MS = 300;
@@ -51,18 +54,30 @@ function pushScreen(screen: Screen) {
   history.pushState({ screen }, '');
 }
 
-/** Saves ~300ms after the last change, and at once when asked (page hidden, unmount). */
+/**
+ * Saves ~300ms after the last change, and at once when asked (page hidden, unmount).
+ * `failed` stays true from a failed save until the next one succeeds.
+ */
 function useAutosave() {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pending = useRef<Draft | null>(null);
+  const [failed, setFailed] = useState(false);
 
   const flush = useCallback(() => {
     clearTimeout(timer.current);
     timer.current = undefined;
     const d = pending.current;
     pending.current = null;
-    // A failed save (storage full, private mode) must not break the flow; the next change retries.
-    if (d) saveDraft(d).catch(() => undefined);
+    if (!d) return;
+    saveDraft(d).then(
+      () => setFailed(false),
+      () => {
+        // Storage full or blocked. Keep it for the next flush unless a newer change is waiting;
+        // every later change saves the whole draft again anyway.
+        pending.current ??= d;
+        setFailed(true);
+      },
+    );
   }, []);
 
   const schedule = useCallback(
@@ -78,6 +93,7 @@ function useAutosave() {
     clearTimeout(timer.current);
     timer.current = undefined;
     pending.current = null;
+    setFailed(false);
   }, []);
 
   useEffect(() => {
@@ -91,7 +107,7 @@ function useAutosave() {
     };
   }, [flush]);
 
-  return { schedule, cancel };
+  return { schedule, cancel, failed };
 }
 
 function useHasLogo(): boolean {
@@ -119,7 +135,7 @@ export function App() {
   const [outbox, setOutbox] = useState<Submission[]>([]);
   const [screen, setScreen] = useState<Screen>(START);
   const hasLogo = useHasLogo();
-  const { schedule, cancel } = useAutosave();
+  const { schedule, cancel, failed: saveFailed } = useAutosave();
 
   useEffect(() => {
     let alive = true;
@@ -163,7 +179,9 @@ export function App() {
     (update) => {
       const current = draftRef.current;
       if (!current) return;
-      const next = draftReducer(current, typeof update === 'function' ? update(current) : update);
+      const action = typeof update === 'function' ? update(current) : update;
+      if (!action) return;
+      const next = draftReducer(current, action);
       commit(next);
       schedule(next);
     },
@@ -242,7 +260,28 @@ export function App() {
     }
   }
 
-  return <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col">{body()}</div>;
+  return (
+    <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col">
+      {saveFailed && <SaveFailedAlert />}
+      {body()}
+    </div>
+  );
+}
+
+/** Persistent until a save works again, so the technician knows work is not being kept. */
+function SaveFailedAlert() {
+  return (
+    <div
+      role="alert"
+      className="mx-[18px] mt-3 flex items-start gap-2.5 rounded-chunky border-2 border-coral bg-roze px-3.5 py-3 text-[15px] font-extrabold text-coral-d"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-px size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7.5v5.5M12 16.5v.01" />
+      </svg>
+      Opslaan lukt niet. Je telefoon heeft te weinig ruimte. Verwijder een foto.
+    </div>
+  );
 }
 
 function Placeholder({ title }: { title: string }) {
