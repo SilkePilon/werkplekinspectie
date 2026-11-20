@@ -58,10 +58,13 @@ export async function removeFromOutbox(id: string): Promise<void> {
 
 /** Drops the in-progress draft after 14 days without changes. Never touches the outbox or the name. */
 export async function purgeExpired(now: Date): Promise<void> {
-  const draft = await loadDraft();
-  if (!draft) return;
-  const updated = Date.parse(draft.updatedAt);
-  if (now.getTime() - updated > DRAFT_MAX_AGE_MS) await clearDraft();
+  // One read-modify-write transaction, so a save racing with the purge is never lost.
+  // An expired draft becomes `undefined`, which loadDraft reads as "no draft".
+  await update<Draft | undefined>(
+    DRAFT,
+    (d) => (d && now.getTime() - Date.parse(d.updatedAt) > DRAFT_MAX_AGE_MS ? undefined : d),
+    store,
+  );
 }
 
 export async function getRememberedName(): Promise<string> {

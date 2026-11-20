@@ -1,0 +1,208 @@
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { formatDate } from '@shared/dates';
+import { QUESTION_IDS } from '@shared/questions';
+import { LIMITS, type Submission } from '@shared/schema';
+import type { Draft } from '../state/draft';
+import { ChunkyButton } from '../ui/ChunkyButton';
+import { Sheet } from '../ui/Sheet';
+
+export interface StartFields {
+  monteur: string;
+  project: string;
+  projectnummer: string;
+  /** Honeypot value; people never see the field. */
+  website: string;
+}
+
+export interface StartScreenProps {
+  hasLogo: boolean;
+  rememberedName: string;
+  /** The unfinished inspection, if any. */
+  draft: Draft | null;
+  outbox: readonly Submission[];
+  onStart: (fields: StartFields) => void;
+  onResume: () => void;
+  onDiscard: () => void;
+  /** Wired in Task 13; the buttons stay disabled until then. */
+  onSendNow?: (s: Submission) => void;
+}
+
+const inputClass =
+  'block w-full min-h-[52px] rounded-chunky border-2 border-grey bg-[#f7f7f7] px-3.5 py-3 text-[17px] font-bold text-ink ' +
+  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-violet';
+
+export function StartScreen({
+  hasLogo,
+  rememberedName,
+  draft,
+  outbox,
+  onStart,
+  onResume,
+  onDiscard,
+  onSendNow,
+}: StartScreenProps) {
+  const [monteur, setMonteur] = useState(rememberedName);
+  const [editName, setEditName] = useState(rememberedName === '');
+  const [project, setProject] = useState('');
+  const [projectnummer, setProjectnummer] = useState('');
+  const [website, setWebsite] = useState('');
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const ids = { naam: useId(), project: useId(), nummer: useId(), hint: useId(), outbox: useId() };
+
+  const complete = [monteur, project, projectnummer].every((v) => v.trim() !== '');
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!complete || draft) return;
+    onStart({ monteur: monteur.trim(), project: project.trim(), projectnummer: projectnummer.trim(), website });
+  }
+
+  return (
+    <form className="flex flex-1 flex-col" onSubmit={submit} noValidate>
+      <header className="px-[18px] pt-[22px]">
+        {hasLogo && <img src="/api/branding/logo" alt="" className="block h-[30px] w-auto" />}
+        <h1 className={hasLogo ? 'sr-only' : 'm-0 text-[18px] font-black text-violet'}>Werkplekinspectie</h1>
+      </header>
+
+      <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
+        {outbox.length > 0 && (
+          <section aria-labelledby={ids.outbox} className="mb-6 rounded-chunky border-2 border-coral bg-roze p-4">
+            <h2 id={ids.outbox} className="m-0 mb-3 text-[18px] font-black text-coral-d">
+              Nog te versturen
+            </h2>
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {outbox.map((s) => (
+                <li key={s.submissionId} className="flex flex-col gap-2">
+                  <span>
+                    {s.project} · {s.projectnummer} · {formatDate(s.startedAt)}
+                  </span>
+                  <ChunkyButton variant="line" disabled={!onSendNow} onClick={() => onSendNow?.(s)}>
+                    Nu versturen
+                  </ChunkyButton>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {rememberedName && !editName ? (
+          <div className="mt-2.5 mb-1 flex items-center justify-between gap-3">
+            <p className="m-0 text-[30px] font-black leading-[1.1]">Hoi {rememberedName}!</p>
+            <ChunkyButton
+              variant="ghost"
+              className="min-h-11 w-auto px-2"
+              aria-label="Naam aanpassen"
+              onClick={() => setEditName(true)}
+            >
+              Aanpassen
+            </ChunkyButton>
+          </div>
+        ) : null}
+
+        {draft ? (
+          <section className="mt-4 rounded-chunky border-2 border-b-5 border-grey p-4">
+            <h2 className="m-0 text-[20px] font-black leading-tight">Je bent nog bezig met een inspectie</h2>
+            <p className="mt-1 mb-4 text-sub">
+              {draft.project} · {Object.keys(draft.answers).length} van {QUESTION_IDS.length} vragen gedaan
+            </p>
+            <div className="flex flex-col gap-3">
+              <ChunkyButton onClick={onResume}>Verder gaan</ChunkyButton>
+              <ChunkyButton variant="line" onClick={() => setConfirmDiscard(true)}>
+                Weggooien
+              </ChunkyButton>
+            </div>
+          </section>
+        ) : (
+          <>
+            <p className="mt-0 mb-[22px] text-sub">Waar doe je vandaag de inspectie?</p>
+            {editName && (
+              <Field id={ids.naam} label="Naam">
+                <input
+                  id={ids.naam}
+                  className={inputClass}
+                  value={monteur}
+                  maxLength={LIMITS.monteur}
+                  autoComplete="name"
+                  onChange={(e) => setMonteur(e.target.value)}
+                />
+              </Field>
+            )}
+            <Field id={ids.project} label="Project">
+              <input
+                id={ids.project}
+                className={inputClass}
+                value={project}
+                maxLength={LIMITS.project}
+                autoComplete="off"
+                onChange={(e) => setProject(e.target.value)}
+              />
+            </Field>
+            <Field id={ids.nummer} label="Projectnummer">
+              <input
+                id={ids.nummer}
+                className={inputClass}
+                value={projectnummer}
+                maxLength={LIMITS.projectnummer}
+                autoComplete="off"
+                onChange={(e) => setProjectnummer(e.target.value)}
+              />
+            </Field>
+            {/* Honeypot: off-screen and skipped by keyboard and screen readers; bots fill it in. */}
+            <input
+              name="website"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              className="absolute -left-[9999px] size-px opacity-0"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+            />
+            <p className="mt-1.5 text-[15px] text-sub">21 korte vragen. Duurt ongeveer 5 minuten.</p>
+          </>
+        )}
+      </main>
+
+      {!draft && (
+        <footer className="px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
+          <ChunkyButton type="submit" disabled={!complete} aria-describedby={complete ? undefined : ids.hint}>
+            Start inspectie
+          </ChunkyButton>
+          {!complete && (
+            <p id={ids.hint} className="mt-2 mb-0 text-center text-[15px] text-sub">
+              Vul eerst alle velden in.
+            </p>
+          )}
+        </footer>
+      )}
+
+      <Sheet open={confirmDiscard} onOpenChange={setConfirmDiscard} title="Inspectie weggooien?">
+        <p className="mt-0 mb-5 text-sub">Al je antwoorden en foto&apos;s van deze inspectie worden gewist.</p>
+        <div className="flex flex-col gap-3">
+          <ChunkyButton
+            variant="coral"
+            onClick={() => {
+              setConfirmDiscard(false);
+              onDiscard();
+            }}
+          >
+            Weggooien
+          </ChunkyButton>
+          <ChunkyButton variant="line" onClick={() => setConfirmDiscard(false)}>
+            Terug
+          </ChunkyButton>
+        </div>
+      </Sheet>
+    </form>
+  );
+}
+
+function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <div className="mb-3.5">
+      <label htmlFor={id} className="mb-1.5 block text-[15px] font-extrabold">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
