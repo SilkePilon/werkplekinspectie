@@ -1,0 +1,402 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Writable } from 'node:stream';
+import type { FastifyInstance } from 'fastify';
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
+import { buildApp, type AppDeps } from '../../src/server/app.js';
+import { loadConfig } from '../../src/server/config.js';
+import type { MailMessage } from '../../src/server/mail/build.js';
+import type { Mailer } from '../../src/server/mail/send.js';
+import type { renderInspectionPdf } from '../../src/server/pdf/render.js';
+import type { Answer, Submission } from '../../src/shared/schema.js';
+import { PNG_DATA_URL, makeSubmission } from '../fixtures/submission.js';
+
+const cfg = loadConfig({
+  MAIL_TO: 'vgm@example.com',
+  MAIL_FROM: 'Werkplekinspectie <inspectie@example.com>',
+  SMTP_HOST: 'smtp.example.com',
+  SMTP_USER: 'example-user',
+  SMTP_PASS: 'example-pass',
+  PUBLIC_ORIGIN: 'https://inspectie.example.com',
+  ORG_NAME: 'Voorbeeld B.V.',
+});
+
+const PDF = Buffer.from('%PDF-1.4 stub');
+const INDEX_HTML = '<!doctype html><title>Werkplekinspectie</title>';
+const GIF_1X1 = 'R0lGODlhAQABAPAAAEMZYQAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+const SVG_LOGO = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
+
+/** A PNG data URL that is only a signature plus an IHDR header claiming the given size. */
+function pngDataUrl(width: number, height: number): string {
+  const head = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(25);
+  ihdr.writeUInt32BE(13, 0);
+  ihdr.write('IHDR', 4, 'latin1');
+  ihdr.writeUInt32BE(width, 8);
+  ihdr.writeUInt32BE(height, 12);
+  return `data:image/png;base64,${Buffer.concat([head, ihdr]).toString('base64')}`;
+}
+
+interface FakeMailer extends Mailer {
+  sent: MailMessage[];
+  /** Number of send() calls, including ones still waiting or failing. */
+  calls: number;
+  failures: number;
+  /** When set, send() waits for this promise before recording the message. */
+  gate?: Promise<void>;
+}
+
+function fakeMailer(): FakeMailer {
+  const mailer: FakeMailer = {
+    sent: [],
+    calls: 0,
+    failures: 0,
+    async send(msg) {
+      mailer.calls += 1;
+      if (mailer.gate) await mailer.gate;
+      if (mailer.failures > 0) {
+        mailer.failures -= 1;
+        throw new Error('Mail versturen mislukt (ECONNECTION)');
+      }
+      mailer.sent.push(msg);
+    },
+    async verify() {
+      return true;
+    },
+  };
+  return mailer;
+}
+
+let staticRoot: string;
+const apps: FastifyInstance[] = [];
+
+beforeAll(() => {
+  staticRoot = mkdtempSync(join(tmpdir(), 'werkplekinspectie-static-'));
+  writeFileSync(join(staticRoot, 'index.html'), INDEX_HTML);
+});
+
+afterAll(() => {
+  rmSync(staticRoot, { recursive: true, force: true });
+});
+
+afterEach(async () => {
+  await Promise.all(apps.splice(0).map((app) => app.close()));
+});
+
+async function setup(deps: Partial<AppDeps> = {}) {
+  const mailer = fakeMailer();
+  const renderPdf = vi.fn<typeof renderInspectionPdf>(async () => PDF);
+  const app = await buildApp(cfg, { mailer, renderPdf, staticRoot, ...deps });
+  apps.push(app);
+  return { app, mailer, renderPdf };
+}
+
+function post(app: FastifyInstance, body: unknown) {
+  return app.inject({
+    method: 'POST',
+    url: '/api/inspecties',
+    headers: { origin: cfg.publicOrigin, 'content-type': 'application/json' },
+    payload: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+}
+
+/** A submission with 4B answered Nee, with the given changes to that answer. */
+function with4B(changes: Partial<Extract<Answer, { answer: 'nee' }>>, top: Partial<Submission> = {}) {
+  const sub = makeSubmission(top, { neeIds: ['4B'], photosPerNee: 1 });
+  sub.answers['4B'] = { ...(sub.answers['4B'] as Extract<Answer, { answer: 'nee' }>), ...changes };
+  return sub;
+}
+
+describe('POST /api/inspecties', () => {
+  test('a valid submission is rendered and mailed once with the PDF attached', async () => {
+    const { app, mailer, renderPdf } = await setup();
+    const sub = makeSubmission({}, { neeIds: ['4B'], photosPerNee: 2 });
+
+    const res = await post(app, sub);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ status: 'verzonden' });
+    expect(mailer.sent).toHaveLength(1);
+    const [attachment] = mailer.sent[0]!.attachments;
+    expect(attachment?.contentType).toBe('application/pdf');
+    expect(attachment?.content.equals(PDF)).toBe(true);
+    expect(mailer.sent[0]!.to).toBe('vgm@example.com');
+    expect(renderPdf).toHaveBeenCalledWith(sub, cfg.branding, undefined, undefined);
+  });
+
+  test('passes the logo to the PDF renderer', async () => {
+    const { app, renderPdf } = await setup({ logo: { data: SVG_LOGO, kind: 'svg' } });
+    await post(app, makeSubmission());
+    expect(renderPdf).toHaveBeenCalledWith(expect.anything(), cfg.branding, SVG_LOGO, 'svg');
+  });
+
+  test('an invalid body gives 400 with the zod paths and sends nothing', async () => {
+    const { app, mailer, renderPdf } = await setup();
+
+    const res = await post(app, with4B({ comment: '   ' }, { monteur: '' }));
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ status: string; fields: string[] }>();
+    expect(body.status).toBe('ongeldig');
+    expect(body.fields).toContain('answers.4B.comment');
+    expect(body.fields).toContain('monteur');
+    expect(new Set(body.fields).size).toBe(body.fields.length);
+    expect(mailer.sent).toHaveLength(0);
+    expect(renderPdf).not.toHaveBeenCalled();
+  });
+
+  test('unknown top-level keys are named in fields', async () => {
+    const { app } = await setup();
+    const res = await post(app, { ...makeSubmission(), extra: 1 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['extra'] });
+  });
+
+  test('malformed JSON gives 400 ongeldig', async () => {
+    const { app, mailer } = await setup();
+    const res = await post(app, '{"submissionId": ');
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: [] });
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('Review Focus 2: the same submissionId twice gives 200 twice and one mail', async () => {
+    const { app, mailer } = await setup();
+    const sub = makeSubmission();
+
+    const first = await post(app, sub);
+    const second = await post(app, sub);
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toEqual({ status: 'verzonden' });
+    expect(mailer.sent).toHaveLength(1);
+  });
+
+  test('Review Focus 2: a double tap while the first send is in flight gives one mail', async () => {
+    const { app, mailer } = await setup();
+    let release!: () => void;
+    mailer.gate = new Promise((resolve) => (release = resolve));
+    const sub = makeSubmission();
+
+    const both = Promise.all([post(app, sub), post(app, sub)]);
+    await vi.waitFor(() => expect(mailer.calls).toBe(1));
+    // Give the second request ample time to reach the handler while the first still waits.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+    const [a, b] = await both;
+
+    expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
+    expect(mailer.calls).toBe(1);
+    expect(mailer.sent).toHaveLength(1);
+  });
+
+  test('a different submissionId is sent again', async () => {
+    const { app, mailer } = await setup();
+    await post(app, makeSubmission());
+    await post(app, makeSubmission({ submissionId: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d' }));
+    expect(mailer.sent).toHaveLength(2);
+  });
+
+  test('a seen id is forgotten after 24 hours', async () => {
+    let now = new Date('2026-11-20T10:00:00Z');
+    const { app, mailer } = await setup({ now: () => now });
+    const sub = makeSubmission();
+
+    await post(app, sub);
+    now = new Date('2026-11-21T09:59:59Z');
+    await post(app, sub);
+    expect(mailer.sent).toHaveLength(1);
+    now = new Date('2026-11-21T10:00:00Z');
+    await post(app, sub);
+    expect(mailer.sent).toHaveLength(2);
+  });
+
+  test('a mail failure gives 502 and the id is not marked, so a retry sends', async () => {
+    const { app, mailer } = await setup();
+    mailer.failures = 1;
+    const sub = makeSubmission();
+
+    const failed = await post(app, sub);
+    expect(failed.statusCode).toBe(502);
+    expect(failed.json()).toEqual({ status: 'mail_mislukt' });
+    expect(mailer.sent).toHaveLength(0);
+
+    const retry = await post(app, sub);
+    expect(retry.statusCode).toBe(200);
+    expect(mailer.sent).toHaveLength(1);
+  });
+
+  test('a render failure gives 500 onbekend without details, and a retry can still send', async () => {
+    const { app, mailer, renderPdf } = await setup();
+    renderPdf.mockRejectedValueOnce(new Error('pdfkit stuk: geheime details'));
+    const sub = makeSubmission();
+
+    const res = await post(app, sub);
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ status: 'onbekend' });
+    expect(res.body).not.toContain('geheime');
+    expect(mailer.sent).toHaveLength(0);
+
+    expect((await post(app, sub)).statusCode).toBe(200);
+    expect(mailer.sent).toHaveLength(1);
+  });
+
+  test('a photo with a PNG prefix but GIF bytes gives 400 naming the photo', async () => {
+    const { app, mailer } = await setup();
+    const res = await post(app, with4B({ photos: [PNG_DATA_URL, `data:image/png;base64,${GIF_1X1}`] }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['answers.4B.photos.1'] });
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('a signature with GIF bytes gives 400 naming the signature', async () => {
+    const { app } = await setup();
+    const res = await post(app, makeSubmission({ signature: `data:image/png;base64,${GIF_1X1}` }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['signature'] });
+  });
+
+  test.each([
+    [2001, 10],
+    [10, 2001],
+    [10000, 10000],
+  ])('a %ix%i photo is rejected as too large', async (w, h) => {
+    const { app, mailer } = await setup();
+    const res = await post(app, with4B({ photos: [pngDataUrl(w, h)] }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['answers.4B.photos.0'] });
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('a 2000x2000 photo and a 2400x1600 signature are accepted', async () => {
+    const { app, mailer } = await setup();
+    const res = await post(app, with4B({ photos: [pngDataUrl(2000, 2000)] }, { signature: pngDataUrl(2400, 1600) }));
+    expect(res.statusCode).toBe(200);
+    expect(mailer.sent).toHaveLength(1);
+  });
+
+  test.each([
+    [2401, 100],
+    [100, 1601],
+  ])('a %ix%i signature is rejected as too large', async (w, h) => {
+    const { app } = await setup();
+    const res = await post(app, makeSubmission({ signature: pngDataUrl(w, h) }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['signature'] });
+  });
+
+  test('a body over 12 MB gives 413 te_groot', async () => {
+    const { app, mailer } = await setup();
+    const res = await post(app, JSON.stringify({ ...makeSubmission(), goodPractice: 'x'.repeat(12_000_001) }));
+    expect(res.statusCode).toBe(413);
+    expect(res.json()).toEqual({ status: 'te_groot' });
+    expect(mailer.sent).toHaveLength(0);
+  });
+});
+
+describe('other routes', () => {
+  test('GET /healthz gives 200 ok', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'GET', url: '/healthz' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('ok');
+  });
+
+  test('GET /api/branding tells whether a logo is configured', async () => {
+    const without = await setup();
+    expect((await without.app.inject({ method: 'GET', url: '/api/branding' })).json()).toEqual({ hasLogo: false });
+    const withLogo = await setup({ logo: { data: SVG_LOGO, kind: 'svg' } });
+    expect((await withLogo.app.inject({ method: 'GET', url: '/api/branding' })).json()).toEqual({ hasLogo: true });
+  });
+
+  test('GET /api/branding/logo without a logo gives 404', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'GET', url: '/api/branding/logo' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ status: 'niet_gevonden' });
+  });
+
+  test.each([
+    ['svg', SVG_LOGO, 'image/svg+xml'],
+    ['png', Buffer.from(pngDataUrl(10, 10).split(',')[1]!, 'base64'), 'image/png'],
+  ] as const)('GET /api/branding/logo serves a %s logo with its content type', async (kind, data, type) => {
+    const { app } = await setup({ logo: { data, kind } });
+    const res = await app.inject({ method: 'GET', url: '/api/branding/logo' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe(type);
+    expect(res.rawPayload.equals(data)).toBe(true);
+  });
+
+  test('GET /some/route serves index.html from staticRoot, uncached', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'GET', url: '/some/route', headers: { accept: 'text/html' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/html/);
+    expect(res.headers['cache-control']).toBe('no-cache');
+    expect(res.body).toBe(INDEX_HTML);
+  });
+
+  test('GET / serves index.html with cache-control no-cache', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'GET', url: '/', headers: { accept: 'text/html' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-cache');
+    expect(res.body).toBe(INDEX_HTML);
+  });
+
+  test.each([
+    ['GET', '/api/onbekend', 'text/html'],
+    ['GET', '/api', 'text/html'],
+    ['GET', '/some/route', 'application/json'],
+    ['GET', '/plaatje.png', 'image/*'],
+    ['POST', '/some/route', 'text/html'],
+  ] as const)('%s %s (Accept %s) gives a JSON 404', async (method, url, accept) => {
+    const { app } = await setup();
+    const res = await app.inject({ method, url, headers: { accept } });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ status: 'niet_gevonden' });
+  });
+});
+
+describe('logging', () => {
+  test('logs status, duration, size and request id but no submission content', async () => {
+    const lines: string[] = [];
+    const logStream = new Writable({
+      write(chunk: Buffer, _enc, done) {
+        lines.push(...chunk.toString().split('\n').filter(Boolean));
+        done();
+      },
+    });
+    const { app } = await setup({ logStream });
+    const sub = makeSubmission({ project: 'Geheim Project' }, { neeIds: ['4B'] });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/inspecties?token=querygeheim',
+      headers: {
+        origin: cfg.publicOrigin,
+        'content-type': 'application/json',
+        'user-agent': 'TestBrowser/1.0',
+        cookie: 'sessie=koekje',
+      },
+      payload: JSON.stringify(sub),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const log = lines.join('\n');
+    for (const secret of ['Jansen', 'Geheim Project', 'Probleem', 'querygeheim', 'TestBrowser', 'koekje', 'base64']) {
+      expect(log).not.toContain(secret);
+    }
+    const entries = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    const completed = entries.find((e) => e.msg === 'request completed');
+    expect(completed).toMatchObject({ res: { statusCode: 200 } });
+    expect(typeof completed?.responseTime).toBe('number');
+    expect(typeof completed?.reqId).toBe('string');
+    const incoming = entries.find((e) => e.msg === 'incoming request');
+    expect(incoming).toMatchObject({
+      req: { method: 'POST', url: '/api/inspecties', contentLength: String(Buffer.byteLength(JSON.stringify(sub))) },
+    });
+  });
+});
