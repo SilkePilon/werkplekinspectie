@@ -10,8 +10,24 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const PERMISSIONS_POLICY = 'camera=(), microphone=(), geolocation=()';
 const ONE_YEAR_S = 365 * 24 * 60 * 60;
 
-const pathOf = (url: string) => url.split('?', 1)[0] ?? url;
+/** The URL without its query string, as sent (not decoded). */
+export const pathOf = (url: string) => url.split('?', 1)[0] ?? url;
 const isApiPath = (path: string) => path === '/api' || path.startsWith('/api/');
+
+/**
+ * Whether the request targets the API. The router decodes the path, so `/%61pi/...` reaches
+ * `/api/...` routes: use the matched route, else the decoded path, and when the path cannot
+ * be decoded treat it as API (fail closed).
+ */
+function targetsApi(req: FastifyRequest): boolean {
+  const route = req.routeOptions.url;
+  if (route !== undefined) return isApiPath(route);
+  try {
+    return isApiPath(decodeURIComponent(pathOf(req.url)));
+  } catch {
+    return true;
+  }
+}
 const stripMapped = (ip: string) => (ip.toLowerCase().startsWith('::ffff:') && isIP(ip.slice(7)) === 4 ? ip.slice(7) : ip);
 
 /**
@@ -48,7 +64,7 @@ function trustFor(trusted: string[]) {
  */
 export function originGuard(publicOrigin: string): onRequestHookHandler {
   return async (req, reply) => {
-    if (SAFE_METHODS.has(req.method) || !isApiPath(pathOf(req.url))) return;
+    if (SAFE_METHODS.has(req.method) || !targetsApi(req)) return;
     const site = req.headers['sec-fetch-site'];
     const sameOrigin = req.headers.origin === publicOrigin && (site === undefined || site === 'same-origin');
     if (!sameOrigin) return reply.code(403).send({ status: 'verboden' });

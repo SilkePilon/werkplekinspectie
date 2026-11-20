@@ -23,6 +23,7 @@ import {
   createSeenIds,
   honeypot,
   originGuard,
+  pathOf,
   requireJson,
   securityHeaders,
 } from './security.js';
@@ -63,8 +64,6 @@ const CLIENT_ERRORS: Partial<Record<number, { status: string }>> = {
 const tooMany = () => Object.assign(new Error('te_veel'), { statusCode: 429 });
 
 class MailFailedError extends Error {}
-
-const pathOf = (url: string) => url.split('?', 1)[0] ?? url;
 
 /** Logs only method, path, status, duration, byte sizes and the request id. */
 function loggerOptions(stream: Writable): FastifyServerOptions['logger'] {

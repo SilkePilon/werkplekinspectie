@@ -351,6 +351,49 @@ describe('origin guard', () => {
     expect(res.json()).toEqual({ status: 'verboden' });
   });
 
+  test.each(['/%61pi/inspecties', '/api/%69nspecties', '/%61%70%69/inspecties?x=1'])(
+    'a percent-encoded submit path %s without Origin gives 403 and sends nothing',
+    async (url) => {
+      const { app, mailer, renderPdf } = await setup();
+      const res = await app.inject({
+        method: 'POST',
+        url,
+        remoteAddress: TUNNEL_PEER,
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify(freshSubmission()),
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json()).toEqual({ status: 'verboden' });
+      expect(mailer.sent).toHaveLength(0);
+      expect(renderPdf).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(['/%61pi/onbekend', '/%61pi'])('an encoded unknown API path %s without Origin gives 403', async (url) => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'POST', url });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ status: 'verboden' });
+  });
+
+  test('a submit path that cannot be decoded is refused before any hook or handler', async () => {
+    const { app, mailer } = await setup();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/inspecties%E0%A4%A',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify(freshSubmission()),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('a POST outside /api/ is not origin-guarded', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'POST', url: '/some/route' });
+    expect(res.statusCode).toBe(404);
+  });
+
   test('GET requests under /api/ need no Origin', async () => {
     const { app } = await setup();
     const res = await app.inject({ method: 'GET', url: '/api/branding', headers: { 'sec-fetch-site': 'cross-site' } });

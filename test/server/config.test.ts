@@ -70,7 +70,7 @@ describe('loadConfig', () => {
         vgmName: 'J. Jansen',
         logoFile: '/config/logo.svg',
       },
-      rateLimit: { perIp: 7, window: '10 minutes', globalPerHour: 30 },
+      rateLimit: { perIp: 7, window: 600_000, globalPerHour: 30 },
     };
     expect(loadConfig(fullEnv())).toEqual(expected);
   });
@@ -92,7 +92,7 @@ describe('loadConfig', () => {
         },
       },
       branding: { orgName: '', orgAddress: [], department: 'Customer Care', vgmName: '' },
-      rateLimit: { perIp: 5, window: '15 minutes', globalPerHour: 20 },
+      rateLimit: { perIp: 5, window: 900_000, globalPerHour: 20 },
     } satisfies Config);
   });
 
@@ -238,10 +238,18 @@ describe('loadConfig', () => {
     },
   );
 
-  test('RATE_LIMIT_WINDOW is passed through as a string', () => {
-    expect(loadConfig({ ...minimalEnv(), RATE_LIMIT_WINDOW: '1 hour' }).rateLimit.window).toBe(
-      '1 hour',
-    );
+  test.each([
+    ['15 minutes', 900_000],
+    ['1 hour', 3_600_000],
+    ['1s', 1000],
+    [' 10m ', 600_000],
+  ])('RATE_LIMIT_WINDOW %j is read as %i ms', (value, ms) => {
+    expect(loadConfig({ ...minimalEnv(), RATE_LIMIT_WINDOW: value }).rateLimit.window).toBe(ms);
+  });
+
+  test.each(['bogus', '0', '15', '999', '-5m', '15 apples'])('RATE_LIMIT_WINDOW %j is rejected', (value) => {
+    const err = configError({ ...minimalEnv(), RATE_LIMIT_WINDOW: value });
+    expect(err.problems).toEqual([expect.stringContaining('RATE_LIMIT_WINDOW')]);
   });
 
   test('blank optional values fall back to their defaults', () => {
@@ -257,6 +265,6 @@ describe('loadConfig', () => {
     expect(config.mail.smtp.port).toBe(465);
     expect(config.branding.department).toBe('Customer Care');
     expect(config.branding.logoFile).toBeUndefined();
-    expect(config.rateLimit.window).toBe('15 minutes');
+    expect(config.rateLimit.window).toBe(900_000);
   });
 });

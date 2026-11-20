@@ -1,6 +1,7 @@
 // Server settings, read once from env at startup. Missing or invalid values stop
 // the container with a message that names every problem at once.
 import { isIP } from 'node:net';
+import { parse as parseDuration } from '@lukeed/ms';
 import { z } from 'zod';
 
 export interface Config {
@@ -19,7 +20,8 @@ export interface Config {
     vgmName: string;
     logoFile?: string;
   };
-  rateLimit: { perIp: number; window: string; globalPerHour: number };
+  /** `window` is in milliseconds. */
+  rateLimit: { perIp: number; window: number; globalPerHour: number };
 }
 
 export class ConfigError extends Error {
@@ -36,6 +38,7 @@ export class ConfigError extends Error {
 const DEFAULT_PORT = 8080;
 const DEFAULT_SMTP_PORT = 465;
 const IMPLICIT_TLS_PORT = 465;
+const MIN_RATE_WINDOW_MS = 1000;
 
 /** Treats an unset, empty or whitespace-only variable as absent. */
 const blankToUndefined = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
@@ -166,7 +169,17 @@ function envSchema(production: boolean) {
       }),
 
       RATE_LIMIT_PER_IP: intVar(5, 1, 1_000_000),
-      RATE_LIMIT_WINDOW: textVar('15 minutes'),
+      RATE_LIMIT_WINDOW: textVar('15 minutes').transform((s, ctx) => {
+        const ms = parseDuration(s);
+        if (ms === undefined || !Number.isFinite(ms) || ms < MIN_RATE_WINDOW_MS) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'moet een duur van minstens 1 seconde zijn, bijv. "15 minutes" of "1h"',
+          });
+          return z.NEVER;
+        }
+        return ms;
+      }),
       RATE_LIMIT_GLOBAL_PER_HOUR: intVar(20, 1, 1_000_000),
     })
     .transform(

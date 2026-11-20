@@ -32,7 +32,7 @@ const CONFIG: Config = {
     smtp: { host: 'smtp.example.com', port: 465, secure: true, user: 'resend', pass: SECRET },
   },
   branding: { orgName: 'Voorbeeld B.V.', orgAddress: [], department: 'Customer Care', vgmName: '' },
-  rateLimit: { perIp: 5, window: '15 minutes', globalPerHour: 20 },
+  rateLimit: { perIp: 5, window: 900_000, globalPerHour: 20 },
 };
 
 const PDF = Buffer.from('%PDF-1.7 test');
