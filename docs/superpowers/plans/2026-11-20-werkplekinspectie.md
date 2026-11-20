@@ -99,7 +99,7 @@ test/**                        mirrors src/**
   - `test`: `vitest run`.
   - `lint`: `eslint .`.
   - `typecheck`: `tsc --noEmit` and `tsc -p tsconfig.server.json --noEmit`.
-- Path alias `@shared/*` → `src/shared/*`, set in both tsconfigs and in Vite. The server build must resolve it, so use relative imports in server code or a `tsc-alias` step; pick one and use it consistently.
+- Client code imports shared code via the alias `@shared/*` → `src/shared/*` (tsconfig + Vite). Server code imports shared code by **relative path**; `tsconfig.server.json` has `rootDir: "src"`, `include: ["src/server","src/shared"]`, `outDir: "dist/server"`, so the entry compiles to `dist/server/server/index.js`.
 - Vitest uses `environment: 'node'` by default and jsdom only for `test/client/**` (`environmentMatchGlobs` or a per-file `// @vitest-environment jsdom`).
 
 - [ ] **Step 1:** Run `npm init` and install exact current majors:
@@ -276,7 +276,7 @@ Layout follows spec §7:
     - Each comment's last 20 chars appear in the extracted text, so nothing is clipped.
     - The page count is greater than 1, and "Omschrijving" appears once per table page.
   - Review Focus 4: a project `'<b>X</b>'` appears literally.
-  - `pdfFileName` for project `'UMC / Utrecht'`, started 2026-11-20, gives `'Werkplekinspectie 2026-UMC  Utrecht-2026-11-20.pdf'`. Pin whatever the sanitiser yields and keep it deterministic.
+  - `pdfFileName` for project `'UMC / Utrecht'`, started 2026-11-20, gives `'Werkplekinspectie 2026-UMC Utrecht-2026-11-20.pdf'` (sanitiser: drop chars outside `[A-Za-z0-9 _-]`, collapse whitespace runs to one space, trim, cap 60).
   - Rendering with an empty `branding` (no logo, empty address) still works.
 - [ ] **Step 2:** Run the tests. Expect FAIL.
 - [ ] **Step 3:** Implement. `layout.ts` owns column widths and the `measureRow(cells) -> height` / `ensureSpace(h)` page-break logic. `render.ts` owns the drawing order.
@@ -320,14 +320,14 @@ Layout follows spec §7:
 ### Task 7: Fastify app with the submit route
 
 **Files:**
-- Create: `src/server/app.ts`, `src/server/index.ts`
+- Create: `src/server/app.ts`, `src/server/index.ts`, `src/server/security.ts` (only `createSeenIds` here; signature in Task 8 Interfaces, TTL 24h)
 - Test: `test/server/app.test.ts` (uses `app.inject`)
 
 **Interfaces:**
 - Consumes: Tasks 2–6.
 - Produces:
   ```ts
-  interface AppDeps { mailer: Mailer; renderPdf?: typeof renderInspectionPdf; now?: () => Date; logo?: { data:Buffer; kind:'svg'|'png' } }
+  interface AppDeps { mailer: Mailer; renderPdf?: typeof renderInspectionPdf; now?: () => Date; logo?: { data:Buffer; kind:'svg'|'png' }; staticRoot?: string /* default dist/client */ }
   function buildApp(cfg:Config, deps:AppDeps): Promise<FastifyInstance>
   ```
 - Routes:
@@ -364,7 +364,7 @@ Layout follows spec §7:
   - A photo whose MIME prefix says PNG but whose bytes are GIF gives 400.
   - `GET /healthz` gives 200.
   - `GET /api/branding/logo` without a logo gives 404.
-  - `GET /some/route` serves `index.html`. Use a temp `dist/client` fixture dir via a `staticRoot` option on `AppDeps`, or skip static in tests; decide and document.
+  - `GET /some/route` serves `index.html` from a temp dir passed as `staticRoot` (created in `beforeAll` with a one-line `index.html`).
 - [ ] **Step 2:** Run the tests. Expect FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the tests. Expect PASS.
@@ -374,7 +374,7 @@ Layout follows spec §7:
 
 **Files:**
 - Create: `src/server/security.ts`
-- Modify: `src/server/app.ts`
+- Modify: `src/server/security.ts`, `src/server/app.ts`
 - Test: `test/server/security.test.ts`
 
 **Interfaces:**
@@ -383,7 +383,7 @@ Layout follows spec §7:
   function clientKey(req: FastifyRequest, trusted: string[]): string    // CF-Connecting-IP only if socket peer ∈ trusted CIDRs (proxy-addr compile), else socket address
   function originGuard(publicOrigin: string): onRequestHookHandler      // POST /api/*: Origin must === publicOrigin; Sec-Fetch-Site, if present, must be 'same-origin'; else 403
   function createGlobalLimiter(maxPerHour: number, now: () => number): { take(): boolean }
-  function createSeenIds(ttlMs: number, now: () => number): { has(id:string):boolean; add(id:string):void }  // used by Task 7; move it here if Task 7 inlined it
+  function createSeenIds(ttlMs: number, now: () => number): { has(id:string):boolean; add(id:string):void }  // created in Task 7
   ```
 - Registration in `buildApp`:
   - `@fastify/helmet` with the spec §10 CSP: `default-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`.
@@ -506,6 +506,7 @@ Layout follows spec §7:
   - Every screen change calls `history.pushState`, and `popstate` goes to the previous screen, so the phone's back button works.
   - The draft is autosaved, debounced at about 300ms, after every action.
 - `compressPhoto(file: File): Promise<string>` calls browser-image-compression with `{maxWidthOrHeight:1600, initialQuality:0.7, fileType:'image/jpeg', useWebWorker:true}` and returns a data URL. If decoding fails it throws `PhotoError` with the message "Deze foto kan niet gebruikt worden. Maak een nieuwe foto."
+- Start screen shows the configured logo (`<img src="/api/branding/logo" alt="">`) only when `GET /api/branding` returns `hasLogo:true`; otherwise just the title "Werkplekinspectie".
 - Copy:
   - **Start:**
     - Greeting "Hoi {naam}!" when a name is remembered; otherwise a "Naam" field.

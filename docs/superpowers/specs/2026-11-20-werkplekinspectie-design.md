@@ -232,6 +232,7 @@ pdfkit, **liggend A4**, nagebouwd naar het Word-formulier:
 | `VGM_NAME` | J. Jansen | Naam VGM-functionaris op de PDF |
 | `BRAND_LOGO_FILE` | /config/logo.svg | Pad naar gemount logo (SVG of PNG), optioneel |
 | `PORT` | 8080 | Luisterpoort |
+| `PUBLIC_ORIGIN` | https://inspectie.example.com | Publieke URL; inzendingen van een andere herkomst worden geweigerd |
 | `TRUST_PROXY` | IP/CIDR van cloudflared | Welke proxy vertrouwd wordt voor client-IP |
 | `RATE_LIMIT_PER_IP`, `RATE_LIMIT_WINDOW`, `RATE_LIMIT_GLOBAL_PER_HOUR` | 5, 15m, 60 | Misbruikgrenzen |
 
