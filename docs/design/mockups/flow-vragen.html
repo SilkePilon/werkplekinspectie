@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#26193C;--violet:#431961;--violet-d:#26193C;--lila:#EFE9F7;--coral:#F34842;--coral-d:#C42B24;--roze:#FDECEB;--grey:#E5E5E5;--grey-d:#C9C9C9;--sub:#5f5670}
+body{margin:0}
+.wrap{display:grid;grid-template-columns:repeat(2,330px);gap:22px 22px;justify-content:center;padding:4px 0}
+@media(max-width:700px){.wrap{grid-template-columns:330px}}
+.cap{font:500 13px/1.4 var(--font-sans);color:var(--muted-foreground);margin:8px 2px 0}
+.phone{position:relative;width:330px;height:700px;background:#fff;color:var(--ink);border:1px solid #cfcad8;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;
+  font-family:"Nunito",sans-serif;font-weight:700;font-size:17px;line-height:1.35}
+.top{display:flex;align-items:center;gap:14px;padding:18px 18px 6px}
+.top svg.x{width:26px;height:26px;color:#9a94a6;flex:none}
+.bar{flex:1;height:16px;background:var(--grey);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--violet);border-radius:99px;position:relative}
+.bar i::after{content:"";position:absolute;left:8px;right:8px;top:4px;height:4px;border-radius:9px;background:rgba(255,255,255,.28)}
+.body{flex:1;padding:18px 18px 0;display:flex;flex-direction:column}
+.cat{display:flex;align-items:center;gap:8px;color:var(--violet);font-weight:800;font-size:15px}
+.cat svg{width:22px;height:22px}
+.q{font-size:25px;font-weight:900;line-height:1.2;margin:10px 0 26px;letter-spacing:-.005em}
+.opts{display:flex;flex-direction:column;gap:12px}
+.opt{height:62px;border:2px solid var(--grey);border-bottom-width:5px;border-radius:16px;display:flex;align-items:center;gap:14px;padding:0 16px;font-size:20px;font-weight:800}
+.opt .ic{width:34px;height:34px;border-radius:10px;border:2px solid var(--grey);display:grid;place-items:center;flex:none;color:#9a94a6}
+.opt .ic svg{width:20px;height:20px}
+.opt.ja{background:var(--lila);border-color:var(--violet);color:var(--violet)}
+.opt.ja .ic{border-color:var(--violet);background:var(--violet);color:#fff}
+.opt.nee{background:var(--roze);border-color:var(--coral);color:var(--coral-d)}
+.opt.nee .ic{border-color:var(--coral);background:var(--coral);color:#fff}
+.foot{padding:16px 18px 22px}
+.btn{height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;letter-spacing:.01em}
+.btn.main{background:var(--violet);color:#fff;border-bottom:5px solid var(--violet-d)}
+.btn.off{background:var(--grey);color:#9a94a6}
+.btn.coral{background:var(--coral);color:#fff;border-bottom:5px solid var(--coral-d)}
+.btn.line{background:#fff;color:var(--ink);border:2px solid var(--grey);border-bottom-width:5px;height:54px;font-size:16px;gap:8px}
+.btn.line svg{width:22px;height:22px}
+/* sheet */
+.dim{position:absolute;inset:0;background:rgba(38,25,60,.35)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--roze);border-radius:22px 22px 0 0;padding:20px 18px 22px}
+.sheet h3{margin:0 0 12px;font-size:22px;font-weight:900;color:var(--coral-d);display:flex;align-items:center;gap:10px}
+.sheet h3 .b{width:34px;height:34px;border-radius:50%;background:var(--coral);display:grid;place-items:center;color:#fff}
+.sheet h3 .b svg{width:18px;height:18px}
+.sheet label{display:block;font-size:15px;font-weight:800;margin:0 0 6px;color:var(--ink)}
+.input{background:#fff;border:2px solid #f2c4c1;border-radius:14px;padding:12px 14px;font-size:17px;color:var(--ink);font-weight:700}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 16px}
+/* start */
+.hello{font-size:30px;font-weight:900;margin:10px 0 4px;line-height:1.1}
+.sub{color:var(--sub);font-weight:700;margin:0 0 22px;font-size:17px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:15px;font-weight:800;margin-bottom:6px}
+.field .input{border-color:var(--grey);background:#F7F7F7}
+.logo-wrap{padding:22px 18px 0}
+.logo-wrap svg.logo{height:30px;width:auto;display:block}
+/* klaar */
+.done{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 26px}
+.badge{width:118px;height:118px;border-radius:50%;background:var(--violet);display:grid;place-items:center;color:#fff;box-shadow:0 8px 0 var(--violet-d)}
+.badge svg{width:62px;height:62px}
+.done h2{font-size:28px;font-weight:900;margin:30px 0 8px;line-height:1.15}
+.done p{color:var(--sub);margin:0;font-size:17px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;margin-top:26px}
+.stats div{border:2px solid var(--grey);border-radius:14px;padding:10px 4px 8px}
+.stats b{display:block;font-size:24px;font-weight:900}
+.stats span{font-size:13px;color:var(--sub)}
+.stats .r b{color:var(--coral-d)}
+</style></head><body>
+<div class="wrap">
+
+<!-- 1 start -->
+<div>
+<div class="phone">
+  <div class="logo-wrap"><span style="font-weight:900;font-size:18px;color:#431961">[logo]</span></div>
+  <div class="body">
+    <p class="hello">Hoi Jan!</p>
+    <p class="sub">Waar doe je vandaag de inspectie?</p>
+    <div class="field"><label>Project</label><div class="input">UMC Utrecht</div></div>
+    <div class="field"><label>Projectnummer</label><div class="input">NL-24-0817</div></div>
+    <p class="sub" style="font-size:15px;margin-top:6px">21 korte vragen. Duurt ongeveer 5 minuten.</p>
+  </div>
+  <div class="foot"><div class="btn main">Start inspectie</div></div>
+</div>
+<p class="cap">Start: naam wordt onthouden, alleen project invullen.</p>
+</div>
+
+<!-- 2 vraag -->
+<div>
+<div class="phone">
+  <div class="top"><svg class="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><div class="bar"><i style="width:52%"></i></div></div>
+  <div class="body">
+    <div class="cat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-3.8 2.5-5 .3 1.6 1 2.5 2 3 .2-3-.5-5.5.5-8z"/></svg>Brandpreventie</div>
+    <p class="q">Zijn er blusmiddelen, en kun je erbij?</p>
+    <div class="opts">
+      <div class="opt ja"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Ja</div>
+      <div class="opt"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>Nee</div>
+      <div class="opt"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 12h12"/></svg></span>Niet van toepassing</div>
+    </div>
+  </div>
+  <div class="foot"><div class="btn main">Volgende</div></div>
+</div>
+<p class="cap">Eén vraag per scherm, drie grote knoppen. Tik, dan Volgende.</p>
+</div>
+
+<!-- 3 nee -->
+<div>
+<div class="phone">
+  <div class="top"><svg class="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><div class="bar"><i style="width:57%"></i></div></div>
+  <div class="body">
+    <div class="cat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-3.8 2.5-5 .3 1.6 1 2.5 2 3 .2-3-.5-5.5.5-8z"/></svg>Brandpreventie</div>
+    <p class="q">Zijn de blusmiddelen gekeurd?</p>
+    <div class="opts">
+      <div class="opt"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Ja</div>
+      <div class="opt nee"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>Nee</div>
+      <div class="opt"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 12h12"/></svg></span>Niet van toepassing</div>
+    </div>
+  </div>
+  <div class="dim"></div>
+  <div class="sheet">
+    <h3><span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>Wat is er mis?</h3>
+    <div class="input" style="min-height:52px">Sticker op blusser in gang B is van 2023.</div>
+    <div class="two">
+      <div class="btn line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>4 dec</div>
+      <div class="btn line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>Foto</div>
+    </div>
+    <div class="btn coral">Doorgaan</div>
+  </div>
+</div>
+<p class="cap">Bij Nee schuift een paneel omhoog: wat is er mis, opgelost vóór, foto.</p>
+</div>
+
+<!-- 4 klaar -->
+<div>
+<div class="phone">
+  <div class="done">
+    <div class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <h2>Verstuurd!</h2>
+    <p>De inspectie is gemaild naar de VGM-functionaris.</p>
+    <div class="stats">
+      <div><b>21</b><span>vragen</span></div>
+      <div class="r"><b>2</b><span>keer Nee</span></div>
+      <div><b>3</b><span>foto's</span></div>
+    </div>
+  </div>
+  <div class="foot"><div class="btn main">Klaar</div></div>
+</div>
+<p class="cap">Na versturen: duidelijk bewijs dat het gelukt is. Daarna is alles van de telefoon gewist.</p>
+</div>
+
+</div>
+</body></html>
