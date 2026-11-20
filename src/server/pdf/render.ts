@@ -4,7 +4,8 @@ import PDFDocument from 'pdfkit';
 import SVGtoPDF from 'svg-to-pdfkit';
 import type { Config } from '../config.js';
 import { decodeDataUrl } from '../images.js';
-import { QUESTIONS, SECTIONS, type Question } from '../../shared/questions.js';
+import { amsterdamParts, formatDateTime, formatDay } from '../../shared/dates.js';
+import { FORM_TITLE, QUESTIONS, SECTIONS, type Question } from '../../shared/questions.js';
 import type { Answer, Submission } from '../../shared/schema.js';
 import {
   COLORS,
@@ -22,38 +23,8 @@ import {
   type Row,
 } from './layout.js';
 
-const TITLE = 'Werkplekinspectie Arbo en Milieu';
 const GOOD_PRACTICE = 'Wat gaat hier goed en waar kan de rest van het bedrijf iets van leren?';
 const PROJECT_MAX = 60;
-
-const amsterdam = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Europe/Amsterdam',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
-
-function amsterdamParts(iso: string) {
-  const parts = Object.fromEntries(
-    amsterdam.formatToParts(new Date(iso)).map((p) => [p.type, p.value]),
-  );
-  return parts as Record<'year' | 'month' | 'day' | 'hour' | 'minute', string>;
-}
-
-/** dd-mm-yyyy HH:mm in Europe/Amsterdam. */
-function dateTime(iso: string): string {
-  const p = amsterdamParts(iso);
-  return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
-}
-
-/** YYYY-MM-DD → dd-mm-yyyy. */
-function day(isoDate: string): string {
-  const [y, m, d] = isoDate.split('-');
-  return `${d}-${m}-${y}`;
-}
 
 /** `Werkplekinspectie {YYYY}-{project}-{YYYY-MM-DD}.pdf`, dated by startedAt in Europe/Amsterdam. */
 export function pdfFileName(sub: Submission): string {
@@ -80,7 +51,7 @@ export async function renderInspectionPdf(
     layout: 'landscape',
     margin: 0,
     bufferPages: true,
-    info: { Title: TITLE, CreationDate: new Date(sub.signedAt) },
+    info: { Title: FORM_TITLE, CreationDate: new Date(sub.signedAt) },
   });
   const chunks: Buffer[] = [];
   const done = new Promise<Buffer>((resolve, reject) => {
@@ -112,7 +83,7 @@ function drawHeader(
 ): void {
   const top = flow.y;
   const leftWidth = 470;
-  let left = top + writeText(doc, TITLE, CONTENT.left, top, leftWidth, { size: SIZE.title, bold: true });
+  let left = top + writeText(doc, FORM_TITLE, CONTENT.left, top, leftWidth, { size: SIZE.title, bold: true });
   left += 6;
 
   const widths = [90, leftWidth - 90];
@@ -174,7 +145,7 @@ function drawSignatures(doc: Doc, flow: Flow, sub: Submission, branding: Config[
   let y = top + pad;
   y += writeText(doc, 'Inspectie uitgevoerd door:', x(0), y, inner, label) + 2;
   y += writeText(doc, sub.monteur, x(0), y, inner) + 4;
-  y += writeText(doc, `datum + tijd: ${dateTime(sub.startedAt)}`, x(0), y, inner, small);
+  y += writeText(doc, `datum + tijd: ${formatDateTime(sub.startedAt)}`, x(0), y, inner, small);
   bottoms.push(y);
 
   // 2. Handtekening monteur
@@ -184,7 +155,7 @@ function drawSignatures(doc: Doc, flow: Flow, sub: Submission, branding: Config[
   const sigHeight = 38;
   doc.image(signature.data, x(1), y, { fit: [inner, sigHeight], align: 'center', valign: 'center' });
   y += sigHeight + 4;
-  y += writeText(doc, `datum + tijd: ${dateTime(sub.signedAt)}`, x(1), y, inner, small);
+  y += writeText(doc, `datum + tijd: ${formatDateTime(sub.signedAt)}`, x(1), y, inner, small);
   bottoms.push(y);
 
   // 3. VGM functionaris, paraaf left empty
@@ -240,7 +211,7 @@ function questionRow(q: Question, answer: Answer, monteur: string): Row {
   return {
     fill: COLORS.neeFill,
     continuation: `${description} (vervolg)`,
-    cells: [...cells, { text: answer.comment }, { text: monteur }, { text: day(answer.actionBefore) }, {}, {}],
+    cells: [...cells, { text: answer.comment }, { text: monteur }, { text: formatDay(answer.actionBefore) }, {}, {}],
   };
 }
 
@@ -340,7 +311,7 @@ function drawPhotos(doc: Doc, flow: Flow, sub: Submission): void {
 function drawFooters(doc: Doc, sub: Submission): void {
   const { start, count } = doc.bufferedPageRange();
   const style = { size: SIZE.small, color: COLORS.sub };
-  const signed = `Digitaal ingevuld en ondertekend via de Werkplekinspectie-app op ${dateTime(sub.signedAt)}`;
+  const signed = `Digitaal ingevuld en ondertekend via de Werkplekinspectie-app op ${formatDateTime(sub.signedAt)}`;
   for (let i = start; i < start + count; i++) {
     doc.switchToPage(i);
     doc

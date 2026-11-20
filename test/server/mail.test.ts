@@ -228,9 +228,19 @@ describe('createMailer', () => {
     expect(err).toBeInstanceOf(Error);
     const e = err as Error;
     expect(e.message).not.toContain(SECRET);
+    expect(e.message).toBe('Mail versturen mislukt (EAUTH)');
     expect(e.cause).toBeUndefined();
-    expect(JSON.stringify(e)).not.toContain(SECRET);
     expect(String(e.stack)).not.toContain(SECRET);
+  });
+
+  test('send leaves out an error code that is not a plain code', async () => {
+    nodemailer.sendMail.mockRejectedValue(
+      Object.assign(new Error('failed'), { code: `x; pass=${SECRET}` }),
+    );
+    const err: unknown = await createMailer(CONFIG.mail)
+      .send(msg)
+      .catch((e: unknown) => e);
+    expect((err as Error).message).toBe('Mail versturen mislukt');
   });
 
   test('verify returns true when the server accepts the connection', async () => {

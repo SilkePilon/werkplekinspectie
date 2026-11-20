@@ -2,7 +2,8 @@
 // sanitised subject, a short summary (plain text and HTML) and the PDF attached.
 import type { Config } from '../config.js';
 import { pdfFileName } from '../pdf/render.js';
-import { QUESTIONS } from '../../shared/questions.js';
+import { formatDate, formatDay } from '../../shared/dates.js';
+import { FORM_TITLE, QUESTIONS } from '../../shared/questions.js';
 import type { Submission } from '../../shared/schema.js';
 
 export interface MailMessage {
@@ -15,30 +16,8 @@ export interface MailMessage {
 }
 
 const SUBJECT_MAX = 200;
-const TITLE = 'Werkplekinspectie Arbo en Milieu';
 const NO_NEE = 'Geen Nee-punten.';
 const ATTACHMENT_NOTE = 'De volledige inspectie staat in de bijlage (PDF).';
-
-const amsterdamDay = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Europe/Amsterdam',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-/** ISO datetime → dd-mm-yyyy in Europe/Amsterdam. */
-function inspectionDate(iso: string): string {
-  const p = Object.fromEntries(
-    amsterdamDay.formatToParts(new Date(iso)).map((part) => [part.type, part.value]),
-  ) as Record<'year' | 'month' | 'day', string>;
-  return `${p.day}-${p.month}-${p.year}`;
-}
-
-/** YYYY-MM-DD → dd-mm-yyyy. */
-function day(isoDate: string): string {
-  const [y, m, d] = isoDate.split('-');
-  return `${d}-${m}-${y}`;
-}
 
 /** Escapes text for use in HTML element content and attribute values. */
 export function escapeHtml(s: string): string {
@@ -69,19 +48,25 @@ function summarise(sub: Submission): Summary {
     facts: [
       ['Monteur', sub.monteur],
       ['Project', `${sub.project} (${sub.projectnummer})`],
-      ['Datum', inspectionDate(sub.startedAt)],
+      ['Datum', formatDate(sub.startedAt)],
       ['Resultaat', `${count('ja')} × Ja, ${count('nee')} × Nee, ${count('nvt')} × Nvt`],
     ],
     nee: answers.flatMap(({ q, a }) =>
       a.answer === 'nee'
-        ? [{ heading: `${q.id} ${q.appText}`, comment: a.comment, due: `Opgelost vóór ${day(a.actionBefore)}` }]
+        ? [
+            {
+              heading: `${q.id} ${q.appText}`,
+              comment: a.comment,
+              due: `Opgelost vóór ${formatDay(a.actionBefore)}`,
+            },
+          ]
         : [],
     ),
   };
 }
 
 function renderText(s: Summary): string {
-  const lines = [TITLE, '', ...s.facts.map(([label, value]) => `${label}: ${value}`), '', 'Nee-punten:'];
+  const lines = [FORM_TITLE, '', ...s.facts.map(([label, value]) => `${label}: ${value}`), '', 'Nee-punten:'];
   if (s.nee.length === 0) lines.push(NO_NEE);
   for (const item of s.nee) lines.push('', item.heading, item.comment, item.due);
   lines.push('', ATTACHMENT_NOTE);
@@ -123,9 +108,9 @@ function renderHtml(s: Summary): string {
           )
           .join('');
   return (
-    `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>${TITLE}</title></head>` +
+    `<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>${FORM_TITLE}</title></head>` +
     `<body style="${STYLE.body}">` +
-    `<h1 style="${STYLE.h1}">${TITLE}</h1>` +
+    `<h1 style="${STYLE.h1}">${FORM_TITLE}</h1>` +
     `<table role="presentation" style="border-collapse:collapse">${facts}</table>` +
     `<h2 style="${STYLE.h2}">Nee-punten:</h2>${nee}` +
     `<p style="${STYLE.note}">${ATTACHMENT_NOTE}</p>` +
@@ -140,7 +125,7 @@ export function buildMail(sub: Submission, pdf: Buffer, cfg: Config): MailMessag
     from: cfg.mail.from,
     to: cfg.mail.to,
     subject: subjectLine(
-      `Werkplekinspectie – ${sub.project} (${sub.projectnummer}) – ${inspectionDate(sub.startedAt)}`,
+      `Werkplekinspectie – ${sub.project} (${sub.projectnummer}) – ${formatDate(sub.startedAt)}`,
     ),
     text: renderText(summary),
     html: renderHtml(summary),

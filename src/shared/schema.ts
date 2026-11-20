@@ -1,6 +1,7 @@
 // Submission shape shared by client and server. Checks shapes and sizes only;
 // magic-byte checks on photos and signature happen on the server.
 import { z } from 'zod';
+import { amsterdamDateKey } from './dates.js';
 import { QUESTION_IDS, type QuestionId } from './questions.js';
 
 export const LIMITS = {
@@ -93,13 +94,6 @@ const answersSchema = z.strictObject(
   >,
 );
 
-const amsterdamDate = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Europe/Amsterdam',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
 export const submissionSchema: z.ZodType<Submission> = z
   .strictObject({
     submissionId: z.uuid(),
@@ -134,7 +128,7 @@ export const submissionSchema: z.ZodType<Submission> = z
     // Zod still runs this refinement after format issues, so startedAt may be malformed here.
     const started = new Date(s.startedAt);
     if (Number.isNaN(started.getTime())) return;
-    const inspectionDay = amsterdamDate.format(started);
+    const inspectionDay = amsterdamDateKey(s.startedAt);
     for (const [id, a] of entries) {
       if (a.answer === 'nee' && a.actionBefore < inspectionDay) {
         ctx.addIssue({

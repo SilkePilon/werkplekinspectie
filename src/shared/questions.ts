@@ -1,6 +1,9 @@
 // The single list of inspection questions, shared by client, validation, PDF and mail.
 // Texts are copied verbatim from spec §5 ("De 21 vragen" and "Onderdelen").
 
+/** Title of the original paper form; used in the PDF and the mail. */
+export const FORM_TITLE = 'Werkplekinspectie Arbo en Milieu';
+
 export const QUESTION_IDS = [
   '1A', '1B', '1C', '1D', '2A', '2B', '2C', '3A', '3B', '4A', '4B', '4C',
   '5A', '6A', '7A', '7B', '8A', '8B', '8C', '9A', '9B',
