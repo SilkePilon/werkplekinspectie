@@ -25,10 +25,18 @@ export interface LastSend {
   fields?: string[];
 }
 
-/** `answers.4B.comment` → `4B`; anything outside the questions → undefined. */
-function questionOf(field: string | undefined): QuestionId | undefined {
-  const id = /^answers\.([^.]+)/.exec(field ?? '')?.[1];
+/**
+ * `answers.4B.comment` and `answers.4B.photos.3` → `4B`. Paths without a question id
+ * (`answers` for the photo total, `signature`, `(body)`) → undefined.
+ */
+function questionOf(field: string): QuestionId | undefined {
+  const id = /^answers\.([^.]+)/.exec(field)?.[1];
   return QUESTION_IDS.find((q) => q === id);
+}
+
+/** The first question the server named, skipping fields that name none. */
+function firstQuestion(fields: string[] | undefined): QuestionId | undefined {
+  return (fields ?? []).map(questionOf).find((id) => id !== undefined);
 }
 
 export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, setOutbox }: SendDeps) {
@@ -37,8 +45,11 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
   // Only while the open draft itself is being sent: App then drops changes to it.
   const draftLocked = useRef(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
-  // Writing to the phone's storage failed while sending; App shows the save-failed alert.
+  // Writing to the phone's storage failed while sending; App shows the save-failed alert
+  // until a later save works (noteSaved).
   const [storeFailed, setStoreFailed] = useState(false);
+  // The draft saved right after the failure: its save working says nothing, sending still failed.
+  const failedDraft = useRef<Draft | null>(null);
   const [last, setLast] = useState<LastSend | null>(null);
 
   const isDraftLocked = useCallback(() => draftLocked.current, []);
@@ -119,6 +130,7 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
             try {
               await addToOutbox(sub);
             } catch {
+              failedDraft.current = signed;
               schedule(signed);
               setStoreFailed(true);
               return;
@@ -132,7 +144,10 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
             if (draftRef.current?.id === sub.submissionId) commit(null);
           } catch (err) {
             // Not expected. Until the outbox has it, the draft is the only copy: keep saving it.
-            if (!queued) schedule(signed);
+            if (!queued) {
+              failedDraft.current = signed;
+              schedule(signed);
+            }
             throw err;
           }
         },
@@ -161,17 +176,23 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
         try {
           await saveDraft(d);
         } catch {
+          failedDraft.current = null;
           setStoreFailed(true);
           return;
         }
         setStoreFailed(false);
         await dropFromOutbox(sub.submissionId);
         commit(d);
-        const highlight = questionOf(fields?.[0]);
+        const highlight = firstQuestion(fields);
         navigate(highlight ? { name: 'summary', highlight } : { name: 'summary' });
       }),
     [exclusive, draftRef, navigate, cancelAutosave, dropFromOutbox, commit],
   );
 
-  return { sendDraft, resend, fix, isDraftLocked, sendingId, storeFailed, last };
+  /** For autosave: a draft other than the one saved right after the failure was written fine. */
+  const noteSaved = useCallback((d: Draft) => {
+    if (d !== failedDraft.current) setStoreFailed(false);
+  }, []);
+
+  return { sendDraft, resend, fix, isDraftLocked, sendingId, storeFailed, noteSaved, last };
 }

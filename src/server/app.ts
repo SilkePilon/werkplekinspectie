@@ -96,15 +96,18 @@ function loggerOptions(stream: Writable): FastifyServerOptions['logger'] {
   };
 }
 
-/** Unique dotted zod paths; unknown keys are named individually. */
+/** Names the whole body in `fields`, e.g. when it is an array instead of an object. */
+const BODY_FIELD = '(body)';
+
+/** Unique dotted zod paths; unknown keys are named individually, an issue at the root as `(body)`. */
 function issueFields(error: z.ZodError): string[] {
   const fields = new Set<string>();
   for (const issue of error.issues) {
     const path = issue.path.map(String);
     if (issue.code === 'unrecognized_keys') {
       for (const key of issue.keys) fields.add([...path, key].join('.'));
-    } else if (path.length > 0) {
-      fields.add(path.join('.'));
+    } else {
+      fields.add(path.length > 0 ? path.join('.') : BODY_FIELD);
     }
   }
   return [...fields];

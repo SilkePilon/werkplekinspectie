@@ -27,15 +27,22 @@ const COUNT_FROM = 100;
 interface Errors {
   comment?: string;
   date?: string;
+  photos?: string;
 }
 
-function validate(comment: string, date: string, minDate: string): Errors {
+/** Photos over the per-item or the total limit, e.g. kept from before and back after Nee again. */
+function photosOver(count: number, elsewhere: number): number {
+  return Math.max(count - LIMITS.photosPerItem, elsewhere + count - LIMITS.photosTotal, 0);
+}
+
+function validate(comment: string, date: string, minDate: string, extraPhotos: number): Errors {
   const errors: Errors = {};
   if (comment.trim() === '') errors.comment = 'Schrijf kort op wat er mis is.';
   else if (comment.length > LIMITS.comment) errors.comment = `Gebruik maximaal ${LIMITS.comment} tekens.`;
   if (date === '') errors.date = 'Kies een datum.';
   // Both are YYYY-MM-DD, so string order is date order.
   else if (date < minDate) errors.date = 'Kies een datum vanaf vandaag.';
+  if (extraPhotos > 0) errors.photos = `Je hebt te veel foto's. Verwijder er ${extraPhotos}.`;
   return errors;
 }
 
@@ -72,7 +79,8 @@ export function NeeSheet({
     photoNote: useId(),
   };
 
-  const errors = tried ? validate(comment, date, minDate) : {};
+  const extraPhotos = photosOver(photos.length, photosElsewhere);
+  const errors = tried ? validate(comment, date, minDate, extraPhotos) : {};
   const left = LIMITS.comment - comment.length;
   const perItemFull = photos.length >= LIMITS.photosPerItem;
   const totalFull = photosElsewhere + photos.length >= LIMITS.photosTotal;
@@ -84,10 +92,10 @@ export function NeeSheet({
 
   function submit() {
     setTried(true);
-    const found = validate(comment, date, minDate);
+    const found = validate(comment, date, minDate, extraPhotos);
     if (found.comment) commentRef.current?.focus();
     else if (found.date) dateRef.current?.focus();
-    else onDone();
+    else if (!found.photos) onDone();
   }
 
   async function pick(e: ChangeEvent<HTMLInputElement>) {
@@ -166,7 +174,10 @@ export function NeeSheet({
           {photoNote}
         </p>
       )}
-      <div role="alert">{photoError && <ErrorText>{photoError}</ErrorText>}</div>
+      <div role="alert">
+        {photoError && <ErrorText>{photoError}</ErrorText>}
+        {errors.photos && <ErrorText>{errors.photos}</ErrorText>}
+      </div>
 
       {photos.length > 0 && (
         <ul className="m-0 mb-4 flex list-none flex-wrap gap-3 p-0">

@@ -185,3 +185,28 @@ test('save in flight + cancel + clearDraft: the draft stays cleared on disk', as
   expect(saveDraft).toHaveBeenCalledTimes(1);
   expect(await loadDraft()).toBeNull();
 });
+
+test('onSaved hears about each current save that worked, with the draft that was written', async () => {
+  const a = draft('A');
+  const b = draft('B');
+  const saveA = deferred();
+  vi.mocked(saveDraft)
+    .mockReturnValueOnce(saveA.promise)
+    .mockRejectedValueOnce(new DOMException('Quota exceeded', 'QuotaExceededError'))
+    .mockResolvedValue(undefined);
+  const onSaved = vi.fn();
+  const { result, unmount } = renderHook(() => useAutosave(onSaved));
+
+  act(() => result.current.schedule(a));
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  act(() => result.current.schedule(b));
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  // A finishes after B started: A is old news. B failed: nothing to report.
+  await act(async () => saveA.resolve());
+  expect(onSaved).not.toHaveBeenCalled();
+
+  // The retry of B works.
+  unmount();
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(onSaved).toHaveBeenCalledExactlyOnceWith(b);
+});

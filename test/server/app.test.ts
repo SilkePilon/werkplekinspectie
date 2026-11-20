@@ -160,6 +160,26 @@ describe('POST /api/inspecties', () => {
     expect(res.json()).toEqual({ status: 'ongeldig', fields: ['extra'] });
   });
 
+  test.each([
+    ['an array', '[]'],
+    ['a string', '"inspectie"'],
+    ['null', 'null'],
+  ])('a JSON body that is %s gives 400 naming (body)', async (_name, body) => {
+    const { app, mailer } = await setup();
+    const res = await post(app, body);
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['(body)'] });
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('too many photos in total is named as answers', async () => {
+    const { app } = await setup();
+    const sub = makeSubmission({}, { neeIds: ['1A', '1B', '1C', '1D', '2A', '2B'], photosPerNee: 3 });
+    const res = await post(app, sub);
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['answers'] });
+  });
+
   test('malformed JSON gives 400 ongeldig', async () => {
     const { app, mailer } = await setup();
     const res = await post(app, '{"submissionId": ');

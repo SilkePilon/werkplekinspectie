@@ -259,6 +259,22 @@ describe('question flow', () => {
     expect(screen.getByText(Q1A)).toBeTruthy();
   });
 
+  test('Volgende on a Nee item with a date before the inspection day opens the sheet again', async () => {
+    const user = setup();
+    await seed({ ...allJaExcept('1A'), '1A': 'nee' }, { '1A': { comment: 'Kapot', actionBefore: '2000-01-01', photos: [] } });
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Verder gaan' }));
+    await user.click(await screen.findByRole('button', { name: 'Overslaan' }));
+    const card = (await screen.findByText(/^1A /)).closest('li')!;
+    expect(within(card).getByText('Nog niet compleet')).toBeTruthy();
+    expect(button('Alles klopt, naar tekenen').disabled).toBe(true);
+
+    await user.click(button('Aanpassen', card));
+    await settle();
+    await user.click(button('Volgende'));
+    expect(neeDialog()).toBeTruthy();
+  });
+
   test('the date picker starts at the inspection day; earlier dates are refused', async () => {
     const user = setup();
     const d = await seed({});
@@ -401,6 +417,26 @@ describe('photos', () => {
     const { dialog } = await openSheet(user);
     expect(button('Foto', dialog).disabled).toBe(false);
     expect(within(dialog).queryByText(/Maximaal/)).toBeNull();
+  });
+
+  test('Nee again with kept photos that go over 15 in total: Doorgaan asks to remove photos first', async () => {
+    const user = setup();
+    const three = [PHOTO, PHOTO, PHOTO];
+    // 2A was Nee with 3 photos, then answered again; its details are kept.
+    await seed(
+      { '1A': 'nee', '1B': 'nee', '1C': 'nee', '1D': 'nee', '2B': 'nee' },
+      { '1A': done('a', three), '1B': done('b', three), '1C': done('c', three), '1D': done('d', three), '2A': done('e', three), '2B': done('f', three) },
+    );
+    const { dialog } = await openSheet(user);
+    expect(screen.getByText('Is je werkplek goed bereikbaar, opgeruimd en verlicht?')).toBeTruthy();
+    expect(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(3);
+    await user.click(button('Doorgaan', dialog));
+    expect(within(dialog).getByText("Je hebt te veel foto's. Verwijder er 3.")).toBeTruthy();
+    expect(neeDialog()).toBeTruthy();
+
+    for (let i = 0; i < 3; i++) await user.click(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })[0]!);
+    await user.click(button('Doorgaan', dialog));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   test('a photo that finishes after the answer changed away from Nee is dropped', async () => {

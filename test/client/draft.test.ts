@@ -318,6 +318,56 @@ describe('missingFields', () => {
   });
 });
 
+describe('missingFields matches what the server refuses', () => {
+  const NEE_IDS = ['1A', '1B', '2A', '3A', '4B', '5A'] as const;
+
+  function withNee(ids: readonly (typeof NEE_IDS)[number][], photos: number, actionBefore = '2026-11-27'): Draft {
+    let d = complete();
+    for (const id of ids) {
+      d = apply(
+        d,
+        { type: 'answer', id, value: 'nee' },
+        { type: 'neeDetails', id, details: { comment: 'Kapot.', actionBefore, photos: Array(photos).fill(PHOTO) } },
+      );
+    }
+    return d;
+  }
+
+  test('an "Opgelost vóór" date before the inspection day is missing; the inspection day itself is fine', () => {
+    expect(missingFields(withNee(['4B'], 0, '2026-11-19'))).toEqual(['answers.4B.actionBefore']);
+    expect(missingFields(withNee(['4B'], 0, '2026-11-20'))).toEqual([]);
+  });
+
+  test('the inspection day is the Amsterdam calendar day of startedAt', () => {
+    // 23:30 UTC on the 20th is already the 21st in Amsterdam.
+    const d = { ...withNee(['4B'], 0, '2026-11-20'), startedAt: '2026-11-20T23:30:00Z' };
+    expect(missingFields(d)).toEqual(['answers.4B.actionBefore']);
+    expect(missingFields({ ...d, nee: { '4B': { ...d.nee['4B']!, actionBefore: '2026-11-21' } } })).toEqual([]);
+  });
+
+  test('more than 3 photos on one item is missing as that item\'s photos', () => {
+    expect(missingFields(withNee(['4B'], 3))).toEqual([]);
+    expect(missingFields(withNee(['4B'], 4))).toEqual(['answers.4B.photos']);
+  });
+
+  test('more than 15 photos in total marks the items past the limit', () => {
+    expect(missingFields(withNee(['1A', '1B', '2A', '3A', '4B'], 3))).toEqual([]);
+    expect(missingFields(withNee(NEE_IDS, 3))).toEqual(['answers.5A.photos']);
+  });
+
+  test('photos kept on an item that went back to Ja do not count', () => {
+    const d = apply(withNee(NEE_IDS, 3), { type: 'answer', id: '1A', value: 'ja' });
+    expect(missingFields(d)).toEqual([]);
+  });
+
+  test('whenever nothing is missing the shared schema accepts the submission', () => {
+    for (const d of [withNee(['4B'], 3, '2026-11-20'), withNee(['1A', '1B', '2A', '3A', '4B'], 3)]) {
+      expect(missingFields(d)).toEqual([]);
+      expect(submissionSchema.safeParse(toSubmission(d)).success).toBe(true);
+    }
+  });
+});
+
 describe('nextUnanswered', () => {
   test("returns '1A' on a new draft and null when all are answered", () => {
     const d = newDraft('J. Jansen', 'X', 'P-1', START);

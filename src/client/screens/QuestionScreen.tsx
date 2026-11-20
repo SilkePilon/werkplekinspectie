@@ -3,7 +3,7 @@ import { amsterdamDateKey } from '@shared/dates';
 import { QUESTIONS, QUESTION_IDS, SECTIONS, type QuestionId } from '@shared/questions';
 import { LIMITS } from '@shared/schema';
 import type { DraftDispatch } from '../App';
-import type { AnswerValue, Draft } from '../state/draft';
+import { missingFields, type AnswerValue, type Draft } from '../state/draft';
 import { AnswerGroup } from '../ui/AnswerGroup';
 import { ChunkyButton } from '../ui/ChunkyButton';
 import { SectionIcon } from '../ui/SectionIcon';
@@ -31,8 +31,6 @@ const TAP_GUARD_MS = 300;
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
-
-const blank = (s: string | undefined) => !s || s.trim() === '';
 
 export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: QuestionScreenProps) {
   const index = QUESTION_IDS.indexOf(id);
@@ -77,7 +75,9 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: Questio
 
   function next() {
     cancelAdvance();
-    if (value === 'nee' && (blank(details?.comment) || blank(details?.actionBefore))) setSheetOpen(true);
+    // Nee without comment or date, a date before the inspection day, or too many photos.
+    const prefix = `answers.${id}.`;
+    if (value === 'nee' && missingFields(draft).some((p) => p.startsWith(prefix))) setSheetOpen(true);
     else onNext();
   }
 

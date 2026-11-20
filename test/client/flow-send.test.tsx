@@ -327,6 +327,23 @@ describe('sending', () => {
     expect((await draftOnDisk())?.id).toBe(d.id);
   });
 
+  test('after the outbox write failed, the alert goes away once a later change is saved again', async () => {
+    const user = setup();
+    vi.mocked(addToOutbox).mockRejectedValueOnce(new DOMException('Quota exceeded', 'QuotaExceededError'));
+    await seed();
+    await user.click(await readyToSend(user));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+
+    // Saving the signed draft itself works, but sending still did not happen: keep telling.
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    expect(screen.getByRole('alert').textContent).toContain('Opslaan op deze telefoon lukt niet.');
+
+    // A change the technician makes is saved fine: storage works again.
+    await user.click(screen.getByRole('checkbox', { name: DECLARATION }));
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
   test('an incomplete draft is not sent: back to the summary', async () => {
     const user = setup();
     const answers = allJa();
@@ -426,6 +443,17 @@ describe('result screens', () => {
     await user.click(button('Verstuur inspectie'));
     expect(await screen.findByRole('heading', { name: 'Verstuurd!' })).toBeTruthy();
     expect(posts().map((s) => s.submissionId)).toEqual([d.id, d.id]);
+  });
+
+  test('400 ongeldig naming answers and a photo: the item of the first field with a question id is highlighted', async () => {
+    const user = setup();
+    inspecties = reply(400, { status: 'ongeldig', fields: ['(body)', 'answers', 'answers.4B.photos.2'] });
+    await seed({ ...allJa(), '4B': 'nee' }, { '4B': nee([PHOTO]) });
+    await user.click(await readyToSend(user));
+    await user.click(await screen.findByRole('button', { name: 'Aanpassen' }));
+    expect(await screen.findByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
+    const card = screen.getByText(/^4B /).closest('li')!;
+    expect(within(card).getByText('Kijk hier nog eens naar.')).toBeTruthy();
   });
 
   test('400 ongeldig on a field outside the questions: the summary opens without a highlight', async () => {

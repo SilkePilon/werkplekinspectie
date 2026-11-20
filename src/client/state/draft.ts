@@ -1,6 +1,7 @@
 // The in-progress inspection on the phone and the pure functions that change it.
+import { amsterdamDateKey } from '@shared/dates';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
-import type { Answer, Submission } from '@shared/schema';
+import { LIMITS, type Answer, type Submission } from '@shared/schema';
 
 export type AnswerValue = 'ja' | 'nee' | 'nvt';
 
@@ -117,12 +118,19 @@ export function draftReducer(d: Draft, a: DraftAction): Draft {
 
 const blank = (s: string | undefined) => !s || s.trim().length === 0;
 
-/** Everything still needed before the draft can be sent, as dotted paths. Empty when complete. */
+/**
+ * Everything still needed before the draft can be sent, as dotted paths. Empty when complete.
+ * Checks what the server checks too: an "Opgelost vóór" date not before the inspection day,
+ * at most 3 photos per item and 15 in total (only items that are Nee count).
+ */
 export function missingFields(d: Draft): string[] {
   const missing: string[] = [];
   if (blank(d.monteur)) missing.push('monteur');
   if (blank(d.project)) missing.push('project');
   if (blank(d.projectnummer)) missing.push('projectnummer');
+  // Both are YYYY-MM-DD, so string order is date order.
+  const inspectionDay = amsterdamDateKey(d.startedAt);
+  let photos = 0;
   for (const id of QUESTION_IDS) {
     const answer = d.answers[id];
     if (!answer) {
@@ -130,7 +138,14 @@ export function missingFields(d: Draft): string[] {
     } else if (answer === 'nee') {
       const details = d.nee[id];
       if (blank(details?.comment)) missing.push(`answers.${id}.comment`);
-      if (blank(details?.actionBefore)) missing.push(`answers.${id}.actionBefore`);
+      const date = details?.actionBefore ?? '';
+      if (blank(date) || date < inspectionDay) missing.push(`answers.${id}.actionBefore`);
+      const count = details?.photos.length ?? 0;
+      photos += count;
+      // The items whose photos go past the total limit are the ones to trim.
+      if (count > LIMITS.photosPerItem || (count > 0 && photos > LIMITS.photosTotal)) {
+        missing.push(`answers.${id}.photos`);
+      }
     }
   }
   if (blank(d.signature) || blank(d.signedAt)) missing.push('signature');

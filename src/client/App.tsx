@@ -99,7 +99,10 @@ export function App() {
     needRefresh: [needRefresh],
     updateServiceWorker,
   } = useRegisterSW();
-  const { schedule, cancel, failed: saveFailed } = useAutosave();
+  // useSend needs the autosave, and the autosave reports to useSend: through a ref.
+  const noteSaved = useRef<(d: Draft) => void>(() => undefined);
+  const onSaved = useCallback((d: Draft) => noteSaved.current(d), []);
+  const { schedule, cancel, failed: saveFailed } = useAutosave(onSaved);
 
   useEffect(() => {
     let alive = true;
@@ -141,6 +144,9 @@ export function App() {
 
   const send = useSend({ draftRef, commit, schedule, cancelAutosave: cancel, navigate, setOutbox });
   const { isDraftLocked } = send;
+  useEffect(() => {
+    noteSaved.current = send.noteSaved;
+  }, [send.noteSaved]);
 
   const dispatch: DraftDispatch = useCallback(
     (update) => {

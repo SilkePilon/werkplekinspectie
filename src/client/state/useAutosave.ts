@@ -11,8 +11,9 @@ const AUTOSAVE_MS = 300;
  * Only the newest save may report back: an older save that finishes late never changes
  * `failed` and never queues a retry. `cancel()` (after sending or Weggooien) makes every save
  * still running count as old, and nothing is saved again until the next `schedule()`.
+ * `onSaved` is told about every current save that worked, with the draft written.
  */
-export function useAutosave() {
+export function useAutosave(onSaved?: (d: Draft) => void) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pending = useRef<Draft | null>(null);
   // The newest draft handed to schedule(): what a retry after a failed save must write.
@@ -20,6 +21,10 @@ export function useAutosave() {
   // Bumped by every save that starts and by cancel(); a save is current while it matches.
   const seq = useRef(0);
   const [failed, setFailed] = useState(false);
+  const onSavedRef = useRef(onSaved);
+  useEffect(() => {
+    onSavedRef.current = onSaved;
+  }, [onSaved]);
 
   const flush = useCallback(() => {
     clearTimeout(timer.current);
@@ -30,7 +35,9 @@ export function useAutosave() {
     const mine = ++seq.current;
     saveDraft(d).then(
       () => {
-        if (mine === seq.current) setFailed(false);
+        if (mine !== seq.current) return;
+        setFailed(false);
+        onSavedRef.current?.(d);
       },
       () => {
         if (mine !== seq.current) return;
