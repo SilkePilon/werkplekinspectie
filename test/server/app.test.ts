@@ -178,12 +178,19 @@ describe('POST /api/inspecties', () => {
     const { app, mailer } = await setup();
     let release!: () => void;
     mailer.gate = new Promise((resolve) => (release = resolve));
+    // preHandler is the last step before the handler, which runs synchronously up to
+    // awaiting the in-flight send; so once both have passed it, both are in the handler.
+    let atHandler = 0;
+    app.addHook('preHandler', async () => {
+      atHandler += 1;
+    });
     const sub = makeSubmission();
 
     const both = Promise.all([post(app, sub), post(app, sub)]);
-    await vi.waitFor(() => expect(mailer.calls).toBe(1));
-    // Give the second request ample time to reach the handler while the first still waits.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => {
+      expect(atHandler).toBe(2);
+      expect(mailer.calls).toBe(1);
+    });
     release();
     const [a, b] = await both;
 
@@ -351,10 +358,25 @@ describe('other routes', () => {
     ['GET', '/api', 'text/html'],
     ['GET', '/some/route', 'application/json'],
     ['GET', '/plaatje.png', 'image/*'],
-    ['POST', '/some/route', 'text/html'],
   ] as const)('%s %s (Accept %s) gives a JSON 404', async (method, url, accept) => {
     const { app } = await setup();
     const res = await app.inject({ method, url, headers: { accept } });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ status: 'niet_gevonden' });
+  });
+
+  // POSTs carry a same-origin Origin and a JSON body, so only routing decides the answer.
+  test.each([
+    ['/some/route', 'text/html'],
+    ['/api/onbekend', 'application/json'],
+  ])('a same-origin POST %s (Accept %s) gives a JSON 404, not the app shell', async (url, accept) => {
+    const { app } = await setup();
+    const res = await app.inject({
+      method: 'POST',
+      url,
+      headers: { accept, origin: cfg.publicOrigin, 'content-type': 'application/json' },
+      payload: '{}',
+    });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ status: 'niet_gevonden' });
   });

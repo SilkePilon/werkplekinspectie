@@ -3,15 +3,29 @@
 import { randomUUID } from 'node:crypto';
 import type { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import rateLimit, { normalizeIP } from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyRequest,
+  type FastifyServerOptions,
+  type preParsingHookHandler,
+} from 'fastify';
 import type { z } from 'zod';
 import type { Config } from './config.js';
 import { InvalidImageError, decodeDataUrl, imageSize } from './images.js';
 import { buildMail } from './mail/build.js';
 import type { Mailer } from './mail/send.js';
 import { renderInspectionPdf } from './pdf/render.js';
-import { createSeenIds } from './security.js';
+import {
+  clientKey,
+  createGlobalLimiter,
+  createSeenIds,
+  honeypot,
+  originGuard,
+  requireJson,
+  securityHeaders,
+} from './security.js';
 import { QUESTION_IDS } from '../shared/questions.js';
 import { LIMITS, submissionSchema, type Submission } from '../shared/schema.js';
 
@@ -38,6 +52,15 @@ const DEFAULT_STATIC_ROOT = fileURLToPath(new URL('../../client', import.meta.ur
 const NOT_FOUND = { status: 'niet_gevonden' } as const;
 const SENT = { status: 'verzonden' } as const;
 const invalid = (fields: string[]) => ({ status: 'ongeldig', fields });
+/** Client errors whose status is kept as is, with its own body. */
+const CLIENT_ERRORS: Partial<Record<number, { status: string }>> = {
+  403: { status: 'verboden' },
+  415: { status: 'niet_ondersteund' },
+  429: { status: 'te_veel' },
+};
+
+/** Thrown by the rate limits so the 429 goes through the error handler. */
+const tooMany = () => Object.assign(new Error('te_veel'), { statusCode: 429 });
 
 class MailFailedError extends Error {}
 
@@ -127,6 +150,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
   const renderPdf = deps.renderPdf ?? renderInspectionPdf;
   const now = deps.now ?? (() => new Date());
   const seen = createSeenIds(SEEN_TTL_MS, () => now().getTime());
+  const globalLimit = createGlobalLimiter(cfg.rateLimit.globalPerHour, () => now().getTime());
   // Sends that are still running, so a double tap waits for the first instead of mailing twice.
   const inFlight = new Map<string, Promise<void>>();
 
@@ -144,13 +168,28 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
     if (code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
       return reply.code(413).send({ status: 'te_groot' });
     }
-    // Other client errors from Fastify itself, e.g. malformed JSON.
     if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
-      return reply.code(statusCode).send(invalid([]));
+      // Other client errors from Fastify itself, e.g. malformed JSON, are 'ongeldig'.
+      return reply.code(statusCode).send(CLIENT_ERRORS[statusCode] ?? invalid([]));
     }
     req.log.error({ err }, 'onbekende_fout');
     return reply.code(500).send({ status: 'onbekend' });
   });
+
+  // Hook order on the submit route: origin guard (all non-GET /api/ requests), then
+  // content type, per-IP limit, global limit, honeypot, and finally the handler.
+  await securityHeaders(app);
+  app.addHook('onRequest', originGuard(cfg.publicOrigin));
+  await app.register(rateLimit, { global: false });
+
+  // Runs before the body is read, and only for requests the per-IP limit let through.
+  const takeGlobalSlot: preParsingHookHandler = async (_req, reply, payload) => {
+    if (!globalLimit.take()) {
+      reply.header('retry-after', globalLimit.retryAfterSeconds());
+      throw tooMany();
+    }
+    return payload;
+  };
 
   async function deliver(sub: Submission): Promise<void> {
     const pdf = await renderPdf(sub, cfg.branding, deps.logo?.data, deps.logo?.kind);
@@ -166,7 +205,24 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
 
   // Validation runs in the handler, not as a route schema, so a preValidation hook
   // (the honeypot) still sees the raw parsed body and can answer before zod runs.
-  app.post('/api/inspecties', { bodyLimit: LIMITS.bodyBytes }, async (req, reply) => {
+  const submitOptions = {
+    bodyLimit: LIMITS.bodyBytes,
+    // @fastify/rate-limit appends its own onRequest hook after this one.
+    onRequest: requireJson,
+    preParsing: takeGlobalSlot,
+    preValidation: honeypot,
+    config: {
+      rateLimit: {
+        max: cfg.rateLimit.perIp,
+        timeWindow: cfg.rateLimit.window,
+        // IPv6 clients are grouped per /64, as the plugin does by default.
+        keyGenerator: (req: FastifyRequest) => normalizeIP(clientKey(req, cfg.trustProxy)),
+        errorResponseBuilder: tooMany,
+      },
+    },
+  };
+
+  app.post('/api/inspecties', submitOptions, async (req, reply) => {
     const parsed = submissionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send(invalid(issueFields(parsed.error)));
     const sub = parsed.data;
