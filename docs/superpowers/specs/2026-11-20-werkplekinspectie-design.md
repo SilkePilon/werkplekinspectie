@@ -256,3 +256,23 @@ Ontbrekende verplichte variabelen → container start niet, met duidelijke meldi
 - Exacte PDF-maten en typografie binnen "lijkt op het origineel".
 - Iconen per onderdeel (lijnstijl, passend bij de mockups).
 - App-iconen en splash op basis van het oranje S-signet.
+
+## 14. Aanpassingen na de reviews (bouwfase)
+
+Tijdens het bouwen zijn deze punten bewust anders of scherper ingevuld dan hierboven:
+
+- **Foto's alleen JPEG.** De app maakt van elke foto een JPEG (max. 1600px, ~0,55 MB); de server weigert andere formaten.
+  De handtekening is een PNG van 8 bit, niet-interlaced, max. 2400×1600 px. Foto's mogen max. 2000 px per zijde zijn.
+- **Bescherming tegen "zip-bommen".** De server controleert PNG's met dezelfde parser als de PDF-bibliotheek en pakt
+  de pixeldata met een harde bovengrens uit, zodat een klein bestand de server niet kan laten vastlopen.
+- **Max. 2 inzendingen tegelijk** in verwerking; daarboven 429 ("Probeer het later opnieuw"). Pod-geheugen 768Mi.
+- **Twee extra uitkomsten in de app:** *te groot* (inspectie past niet; foto's verwijderen via Aanpassen) en
+  *traag* (versturen duurde te lang; de wachttijd groeit mee met de grootte, max. 3 minuten).
+- **PDF-lettertype Noto Sans** (OFL-licentie) zodat namen met accenten en andere schriften goed op de PDF staan.
+- **CSP** staat inline-stijlen toe (`style-src 'self' 'unsafe-inline'`), nodig voor de bottom sheet; scripts blijven
+  alleen `'self'`.
+- **Kubernetes `Recreate`-strategie** zodat er nooit twee pods tegelijk draaien (de lijst met verzonden inspecties
+  staat in het geheugen van één pod, 24 uur).
+- **CI:** het image wordt pas gepubliceerd als tests en CodeQL slagen.
+- **Nog niet geautomatiseerd:** een end-to-end test in een echte browser. Test vóór ingebruikname handmatig op een
+  echte iPhone en Android-telefoon (invullen, foto, handtekening, offline + later versturen).

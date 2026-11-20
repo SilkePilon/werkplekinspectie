@@ -708,7 +708,7 @@ Layout follows spec §7:
 
 **Files:** none new.
 
-- [ ] **Step 1:** Run `git grep -n -i -E -f <local-branding-terms> -- . ':!docs/superpowers'`. Expect no hits in code, README, manifests or mockups. The spec and plan may name the company, but not a person's name or email; check those too with `git grep -n -i -f <local-name-terms> -- docs`. Expect no hits.
+- [ ] **Step 1:** Run the local, untracked branding grep (terms kept outside the repo) over the whole tree. Expect no hits.
 - [ ] **Step 2:** Run `gh repo create SilkePilon/werkplekinspectie --public --source . --remote origin --description "PWA voor werkplekinspecties (Arbo en Milieu) met PDF per mail" --push`.
 - [ ] **Step 3:** Watch the runs with `gh run list --limit 5`. When finished, `gh run view <id>` must show both `ci` and `docker` succeeded. Fix and push if not.
 - [ ] **Step 4:** Run `gh api /users/SilkePilon/packages/container/werkplekinspectie/versions --jq '.[0].metadata.container.tags'`. It must include `latest`. Make the package public if the user wants anonymous pulls; ask first, because it is outward-facing.
