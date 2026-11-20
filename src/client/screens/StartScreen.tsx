@@ -193,11 +193,20 @@ export function StartScreen({
                 onChange={(e) => setProjectnummer(e.target.value)}
               />
             </Field>
-            {/* Honeypot: off-screen and skipped by keyboard and screen readers; bots fill it in. */}
+            {/*
+              Honeypot: off-screen and skipped by keyboard and screen readers; bots fill it in. It is
+              sent as `website`, but the input has a meaningless name and opts out of password
+              managers, so autofill never fills it for a real technician.
+            */}
             <input
-              name="website"
+              name="hp_ref"
+              id="hp_ref"
               tabIndex={-1}
               autoComplete="off"
+              data-1p-ignore=""
+              data-lpignore="true"
+              data-bwignore=""
+              data-form-type="other"
               aria-hidden="true"
               className="absolute -left-[9999px] size-px opacity-0"
               value={website}

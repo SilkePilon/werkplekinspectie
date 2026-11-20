@@ -515,14 +515,20 @@ describe('start screen', () => {
     expect(button('Start inspectie').disabled).toBe(true);
   });
 
-  test('the honeypot is hidden from people and ends up in the draft', async () => {
+  test('the honeypot is hidden from people, skipped by password managers, and ends up in the draft', async () => {
     const user = setup();
     const { container } = render(<App />);
     await fillStart(user);
-    const honeypot = container.querySelector('input[name="website"]') as HTMLInputElement;
+    // A meaningless name: autofill would happily fill a field called `website`.
+    expect(container.querySelector('input[name="website"]')).toBeNull();
+    const honeypot = container.querySelector('input[name="hp_ref"]') as HTMLInputElement;
     expect(honeypot.tabIndex).toBe(-1);
     expect(honeypot.getAttribute('aria-hidden')).toBe('true');
     expect(honeypot.autocomplete).toBe('off');
+    expect(honeypot.hasAttribute('data-1p-ignore')).toBe(true);
+    expect(honeypot.hasAttribute('data-bwignore')).toBe(true);
+    expect(honeypot.getAttribute('data-lpignore')).toBe('true');
+    expect(honeypot.getAttribute('data-form-type')).toBe('other');
     fireEvent.change(honeypot, { target: { value: 'spam' } });
     await user.click(button('Start inspectie'));
     await tick(300);
