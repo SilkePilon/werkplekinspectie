@@ -1,0 +1,8 @@
+{
+  // Browser code only: no Node types or globals (process, Buffer, node:*) may leak in.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client"]
+  },
+  "include": ["src/client"]
+}

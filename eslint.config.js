@@ -9,6 +9,11 @@ export default defineConfig([
   {
     files: ['**/*.{js,ts,tsx}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
+  },
+  {
+    // Node globals everywhere except the browser app.
+    files: ['**/*.{js,ts,tsx}'],
+    ignores: ['src/client/**'],
     languageOptions: { globals: globals.node },
   },
   {
