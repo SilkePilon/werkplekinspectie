@@ -315,4 +315,5 @@ concepten en de wachtrij blijven bewaard.
 
 ## Licentie
 
-[MIT](LICENSE)
+[MIT](LICENSE). De PDF gebruikt het lettertype Noto Sans (SIL Open Font License 1.1); de lettertypebestanden en
+hun licentie staan in [`src/server/pdf/fonts/`](src/server/pdf/fonts/OFL.txt).

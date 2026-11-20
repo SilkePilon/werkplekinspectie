@@ -1,6 +1,8 @@
 // Page geometry and the table engine for the inspection PDF: column widths, row
 // measuring, page breaks with a repeated header, and splitting rows that are
 // taller than a whole page. render.ts decides what goes where.
+import { readFileSync } from 'node:fs';
+import { create as createFont, type Font } from 'fontkit';
 import type PDFDocument from 'pdfkit';
 
 export type Doc = typeof PDFDocument;
@@ -32,7 +34,6 @@ export const COLORS = {
   neeFill: '#FDECEB',
 } as const;
 
-export const FONT = { regular: 'Helvetica', bold: 'Helvetica-Bold' } as const;
 export const SIZE = { title: 16, body: 9, cell: 8, small: 7.5, heading: 12 } as const;
 
 const PAD = 3;
@@ -47,10 +48,35 @@ export const MAIN_COLUMNS: readonly number[] = [
   ...OTHER_COLUMNS,
 ];
 
-// Helvetica is a standard PDF font with WinAnsi encoding: Latin-1 plus these.
-const WIN_ANSI_EXTRA = new Set(
-  [...'€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ\u2010\u2011\u202F'].map((c) => c.codePointAt(0)),
-);
+// Noto Sans (SIL Open Font License, see fonts/OFL.txt), embedded so names such as
+// "Łukasz Wiśniewski" print as written. The build copies fonts/ next to the compiled code.
+const FONT_FILES = { regular: 'NotoSans-Regular.ttf', bold: 'NotoSans-Bold.ttf' } as const;
+export const FONT = { regular: 'NotoSans', bold: 'NotoSans-Bold' } as const;
+
+type FontStyle = keyof typeof FONT_FILES;
+let fontData: Record<FontStyle, Buffer> | undefined;
+let coverage: Font[] | undefined;
+
+function fonts(): Record<FontStyle, Buffer> {
+  fontData ??= {
+    regular: readFileSync(new URL(`./fonts/${FONT_FILES.regular}`, import.meta.url)),
+    bold: readFileSync(new URL(`./fonts/${FONT_FILES.bold}`, import.meta.url)),
+  };
+  return fontData;
+}
+
+/** Registers the embedded fonts on a new document; call before any text. */
+export function registerFonts(doc: Doc): void {
+  const data = fonts();
+  doc.registerFont(FONT.regular, data.regular);
+  doc.registerFont(FONT.bold, data.bold);
+}
+
+/** Whether both the regular and the bold font have a glyph for the code point. */
+function hasGlyph(cp: number): boolean {
+  coverage ??= [createFont(fonts().regular), createFont(fonts().bold)];
+  return coverage.every((font) => font.hasGlyphForCodePoint(cp));
+}
 
 /** Control, zero-width and variation-selector code points: dropped without a trace. */
 const isIgnored = (cp: number) =>
@@ -60,12 +86,11 @@ const isIgnored = (cp: number) =>
   cp === 0x2060 ||
   (cp >= 0xfe00 && cp <= 0xfe0f);
 
-const isDrawable = (cp: number) =>
-  cp === 0x0a || (cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff) || WIN_ANSI_EXTRA.has(cp);
+const isDrawable = (cp: number) => cp === 0x0a || (cp >= 0x20 && cp <= 0x7e) || hasGlyph(cp);
 
 /**
- * Makes text drawable in Helvetica. pdfkit would print garbage for characters
- * outside WinAnsi (emoji, CJK), so each run of them becomes one "?".
+ * Makes text drawable in the embedded font. pdfkit would print an empty box for
+ * characters the font lacks (emoji, CJK), so each run of them becomes one "?".
  */
 export function pdfSafe(text: string): string {
   let out = '';

@@ -260,10 +260,28 @@ describe('renderInspectionPdf', () => {
     expect(all).toContain('<script>alert(1)</script> & "quotes"');
   });
 
-  test('replaces characters Helvetica cannot draw instead of printing garbage', async () => {
+  test('replaces characters the embedded font cannot draw (emoji, CJK) instead of printing garbage', async () => {
     const sub = makeSubmission({ project: 'Kabel 🔌 los — “ok” € ë 中' });
     const all = (await pagesOf(await renderInspectionPdf(sub, BRANDING))).join('\n');
     expect(all).toContain('Kabel ? los — “ok” € ë ?');
+  });
+
+  test('prints names and text outside Latin-1 intact, in regular and bold text', async () => {
+    const sub = makeSubmission(
+      { monteur: 'Łukasz Wiśniewski', project: 'Ștefan Güneş Őrs' },
+      { neeIds: ['2A'] },
+    );
+    sub.answers['2A'] = { answer: 'nee', comment: 'Олег: ladder ťažká', actionBefore: '2026-11-27', photos: [] };
+    const all = (await pagesOf(await renderInspectionPdf(sub, BRANDING))).join('\n');
+    expect(all).toContain('Łukasz Wiśniewski');
+    expect(all).toContain('Ștefan Güneş Őrs');
+    expect(all).toContain('Олег: ladder ťažká');
+  });
+
+  test('embeds the fonts instead of using a standard PDF font', async () => {
+    const pdf = (await renderInspectionPdf(makeSubmission(), BRANDING)).toString('latin1');
+    expect(pdf).toMatch(/\/FontFile2/);
+    expect(pdf).not.toMatch(/\/BaseFont\s*\/Helvetica/);
   });
 
   test('renders with empty branding, without a logo', async () => {

@@ -17,6 +17,7 @@ import {
   Table,
   drawRow,
   measureRow,
+  registerFonts,
   textHeight,
   writeText,
   type Doc,
@@ -53,6 +54,7 @@ export async function renderInspectionPdf(
     bufferPages: true,
     info: { Title: FORM_TITLE, CreationDate: new Date(sub.signedAt) },
   });
+  registerFonts(doc);
   const chunks: Buffer[] = [];
   const done = new Promise<Buffer>((resolve, reject) => {
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));

@@ -18,7 +18,7 @@ FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6
 LABEL org.opencontainers.image.title="werkplekinspectie" \
       org.opencontainers.image.description="Werkplekinspectie Arbo en Milieu als PWA: invullen op de telefoon, als PDF per mail versturen." \
       org.opencontainers.image.source="https://github.com/SilkePilon/werkplekinspectie" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="MIT AND OFL-1.1"
 ENV NODE_ENV=production PORT=8080
 WORKDIR /app
 # npm is not needed at runtime; removing it shrinks the attack surface.
@@ -26,6 +26,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 # Files stay owned by root, so the app user cannot change them.
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
+# dist holds the client, the server and the PDF fonts (copied there by `npm run build`).
 COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 8080

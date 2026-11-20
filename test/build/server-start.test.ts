@@ -4,8 +4,10 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, expect, test } from 'vitest';
+import type { renderInspectionPdf } from '../../src/server/pdf/render.js';
+import { makeSubmission } from '../fixtures/submission.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const ENTRY = join(ROOT, 'dist/server/server/index.js');
@@ -113,4 +115,13 @@ test('/ serves the built app shell', async () => {
   expect(res.status).toBe(200);
   expect(res.headers.get('content-type')).toMatch(/^text\/html/);
   expect(await res.text()).toContain('Werkplekinspectie');
+});
+
+test('the built PDF renderer finds its embedded fonts', async () => {
+  const built = pathToFileURL(join(ROOT, 'dist/server/server/pdf/render.js')).href;
+  const { renderInspectionPdf: render } = (await import(built)) as { renderInspectionPdf: typeof renderInspectionPdf };
+  const branding = { orgName: 'Voorbeeld B.V.', orgAddress: [], department: '', vgmName: '' };
+  const pdf = await render(makeSubmission({ monteur: 'Łukasz Wiśniewski' }), branding);
+  expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+  expect(pdf.toString('latin1')).toContain('/FontFile2');
 });
