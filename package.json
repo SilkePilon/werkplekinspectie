@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "description": "Werkplekinspectie Arbo en Milieu als PWA",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "dev": "vite",
-    "dev:server": "tsx watch src/server/index.ts",
+    "dev:server": "tsx watch --env-file-if-exists=.env src/server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/server/index.js",
     "test": "vitest run",
@@ -65,5 +66,8 @@
     "vite": "^8.3.8",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.1.1"
+  },
+  "allowScripts": {
+    "esbuild": true
   }
 }

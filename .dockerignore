@@ -1,0 +1,17 @@
+# Only what the build needs goes into the build context.
+.git
+.github
+.superpowers
+.env
+.env.*
+!.env.example
+node_modules
+dist
+dev-dist
+coverage
+deploy
+docs
+test
+*.md
+Dockerfile
+.dockerignore

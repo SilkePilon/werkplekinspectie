@@ -1,0 +1,16 @@
+# Alleen binnen het cluster bereikbaar. Cloudflare Tunnel stuurt het verkeer naar
+# http://werkplekinspectie:80 (of werkplekinspectie.<namespace>.svc.cluster.local).
+apiVersion: v1
+kind: Service
+metadata:
+  name: werkplekinspectie
+  labels:
+    app.kubernetes.io/name: werkplekinspectie
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: werkplekinspectie
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

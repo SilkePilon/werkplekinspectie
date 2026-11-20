@@ -1,0 +1,23 @@
+# VOORBEELD met nepgegevens. Pas de waarden aan voor jouw organisatie.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: werkplekinspectie
+data:
+  # De publieke URL (alleen schema + host). Inzendingen van een andere herkomst worden geweigerd.
+  PUBLIC_ORIGIN: "https://inspectie.example.com"
+  # Van wie de header CF-Connecting-IP vertrouwd wordt: de cloudflared-pod. 10.42.0.0/16 is de
+  # standaard pod-CIDR van k3s. Draait cloudflared ergens anders, vul dan dat IP/CIDR in.
+  TRUST_PROXY: "10.42.0.0/16"
+  # PDF-kop.
+  ORG_NAME: "Voorbeeld B.V."
+  # Meerdere regels, gescheiden door \n.
+  ORG_ADDRESS: "Voorbeeldstraat 1\\n1234 AB Voorbeeldstad"
+  ORG_DEPARTMENT: "Customer Care"
+  VGM_NAME: "J. Jansen"
+  # Het logo uit ConfigMap `werkplekinspectie-branding` (SVG of PNG). Weglaten = geen logo.
+  BRAND_LOGO_FILE: "/config/logo.svg"
+  # Misbruikgrenzen (dit zijn de standaardwaarden).
+  RATE_LIMIT_PER_IP: "5"
+  RATE_LIMIT_WINDOW: "15 minutes"
+  RATE_LIMIT_GLOBAL_PER_HOUR: "20"

@@ -1,0 +1,95 @@
+# Werkplekinspectie op k3s. Geen namespace: kies die zelf met `kubectl -n <namespace> apply -f`.
+# Vereist: Secret `werkplekinspectie` (secret.example.yaml), ConfigMap `werkplekinspectie`
+# (configmap.example.yaml) en, voor het logo, ConfigMap `werkplekinspectie-branding`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: werkplekinspectie
+  labels:
+    app.kubernetes.io/name: werkplekinspectie
+spec:
+  # Precies één replica: de rate limits en de lijst met al verstuurde inzendingen staan in het
+  # geheugen van de pod. Met meer replica's krijgt elke pod zijn eigen tellers en lijst.
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: werkplekinspectie
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: werkplekinspectie
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        # De gebruiker `node` uit het image; numeriek zodat Kubernetes runAsNonRoot kan controleren.
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: werkplekinspectie
+          image: ghcr.io/silkepilon/werkplekinspectie:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: werkplekinspectie
+            - configMapRef:
+                name: werkplekinspectie
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            # Het rootfilesystem is read-only; pdfkit/nodemailer kunnen hier tijdelijk schrijven.
+            - name: tmp
+              mountPath: /tmp
+            # Het logo uit ConfigMap `werkplekinspectie-branding` (sleutel logo.svg) staat dan
+            # op /config/logo.svg; zie BRAND_LOGO_FILE in de ConfigMap.
+            - name: branding
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: branding
+          configMap:
+            name: werkplekinspectie-branding
+            # Zonder logo: laat deze ConfigMap weg én haal BRAND_LOGO_FILE uit de ConfigMap.
+            optional: true
