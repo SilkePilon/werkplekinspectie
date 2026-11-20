@@ -14,6 +14,7 @@ export function ProgressBar({ value, label, className }: ProgressBarProps) {
     <div
       role="progressbar"
       aria-label={label}
+      aria-valuetext={label}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={percent}

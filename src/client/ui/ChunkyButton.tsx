@@ -12,7 +12,9 @@ export interface ChunkyButtonProps extends ComponentProps<'button'> {
 const base =
   'relative flex w-full min-h-14 select-none items-center justify-center gap-2 rounded-chunky px-5 ' +
   'text-[18px] font-black tracking-[.01em] ' +
-  'outline-none focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet ' +
+  // Never add bare `outline-none`: in Tailwind 4 it sets --tw-outline-style to none, which also
+  // hides the focus-visible ring. The explicit outline-solid keeps the ring visible.
+  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet ' +
   'motion-safe:transition-transform ' +
   'disabled:cursor-not-allowed';
 

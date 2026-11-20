@@ -18,7 +18,8 @@
   --color-grey: #e5e5e5;
   --color-grey-d: #c9c9c9;
   --color-sub: #5f5670;
-  /* Idle icons and disabled text (mockup #9a94a6); never used for readable text. */
+  /* Mockup #9a94a6: idle answer icons (next to their text label) and the label of disabled
+     buttons. Too light for body text; disabled controls are exempt from WCAG contrast. */
   --color-mute: #9a94a6;
 
   /* Buttons and inputs */

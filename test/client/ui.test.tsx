@@ -11,6 +11,14 @@ function radio(name: string): HTMLInputElement {
   return screen.getByRole('radio', { name }) as HTMLInputElement;
 }
 
+/** Tailwind 4: a bare `outline-none` also kills the focus-visible ring, so require outline-solid. */
+function expectFocusRing(el: Element, variant: 'focus-visible' | 'has-focus-visible') {
+  const classes = el.className.split(/\s+/);
+  expect(classes).not.toContain('outline-none');
+  expect(classes).toContain(`${variant}:outline-solid`);
+  expect(classes).toContain(`${variant}:outline-3`);
+}
+
 function ControlledGroup({ onChange }: { onChange: (v: Answer) => void }) {
   const [value, setValue] = useState<Answer | undefined>(undefined);
   return (
@@ -47,6 +55,11 @@ describe('AnswerGroup', () => {
     expect(radio('Niet van toepassing').checked).toBe(true);
     expect(radio('Ja').checked).toBe(false);
     expect(radio('Nee').checked).toBe(false);
+  });
+
+  test('every option label shows a keyboard focus ring', () => {
+    render(<AnswerGroup name="1A" legend="Vraag" value="ja" onChange={() => {}} />);
+    for (const r of screen.getAllByRole('radio')) expectFocusRing(r.closest('label')!, 'has-focus-visible');
   });
 
   test('arrow keys move the selection (native radio behaviour)', async () => {
@@ -93,6 +106,13 @@ describe('ChunkyButton', () => {
   });
 });
 
+describe('ChunkyButton focus ring', () => {
+  test.each(['main', 'coral', 'line', 'ghost'] as const)('%s shows a focus-visible ring', (variant) => {
+    render(<ChunkyButton variant={variant}>Volgende</ChunkyButton>);
+    expectFocusRing(screen.getByRole('button'), 'focus-visible');
+  });
+});
+
 describe('ProgressBar', () => {
   test('exposes aria-valuenow as a 0-100 integer and the label', () => {
     render(<ProgressBar value={12 / 21} label="Vraag 12 van 21" />);
@@ -100,6 +120,7 @@ describe('ProgressBar', () => {
     expect(bar.getAttribute('aria-valuemin')).toBe('0');
     expect(bar.getAttribute('aria-valuemax')).toBe('100');
     expect(bar.getAttribute('aria-valuenow')).toBe('57');
+    expect(bar.getAttribute('aria-valuetext')).toBe('Vraag 12 van 21');
   });
 
   test('clamps values outside 0..1', () => {
@@ -120,6 +141,30 @@ describe('Sheet', () => {
     expect(dialog.contains(document.activeElement)).toBe(true);
     await userEvent.keyboard('{Escape}');
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  test('Tab and Shift+Tab keep focus inside the dialog', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Buiten</button>
+        <Sheet open onOpenChange={() => {}} title="Wat is er mis?">
+          <button type="button">Foto</button>
+          <button type="button">Doorgaan</button>
+        </Sheet>
+      </>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Wat is er mis?' });
+    const first = screen.getByRole('button', { name: 'Foto' });
+    const last = screen.getByRole('button', { name: 'Doorgaan' });
+    expect(document.activeElement).toBe(first);
+    await user.tab();
+    expect(document.activeElement).toBe(last);
+    await user.tab();
+    expect(document.activeElement).toBe(first);
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+    expect(dialog.contains(document.activeElement)).toBe(true);
   });
 
   test('renders nothing when closed', () => {
