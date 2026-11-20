@@ -13,6 +13,8 @@ export interface SummaryScreenProps {
   onEditGoodPractice: () => void;
   /** A question to point out: the server said something is wrong with it. */
   highlight?: QuestionId;
+  /** Sending stopped: the inspection is too large, photos must go. */
+  tooLarge?: boolean;
   /** "Alles klopt, naar tekenen". */
   onNext: () => void;
   onClose: () => void;
@@ -45,7 +47,15 @@ function incompleteQuestions(draft: Draft): Set<QuestionId> {
 
 const photoCount = (n: number) => (n === 1 ? '1 foto' : `${n} foto's`);
 
-export function SummaryScreen({ draft, onEdit, onEditGoodPractice, highlight, onNext, onClose }: SummaryScreenProps) {
+export function SummaryScreen({
+  draft,
+  onEdit,
+  onEditGoodPractice,
+  highlight,
+  tooLarge = false,
+  onNext,
+  onClose,
+}: SummaryScreenProps) {
   const ids = { nee: useId(), all: useId(), why: useId() };
   const total = counts(draft);
   const incomplete = incompleteQuestions(draft);
@@ -61,6 +71,14 @@ export function SummaryScreen({ draft, onEdit, onEditGoodPractice, highlight, on
 
       <main className="flex flex-1 flex-col px-[18px] pt-1">
         <h1 className="mt-2 mb-1 text-[26px] font-black leading-[1.15]">Klopt alles?</h1>
+        {tooLarge && (
+          <p
+            role="alert"
+            className="mt-2 mb-0 rounded-chunky border-2 border-coral bg-roze px-3.5 py-3 text-[15px] font-extrabold text-coral-d"
+          >
+            De inspectie is te groot om te versturen. Verwijder een paar foto&apos;s.
+          </p>
+        )}
         <ul className="m-0 mt-3 mb-4 flex list-none gap-2 p-0">
           {(['ja', 'nee', 'nvt'] as const).map((v) => (
             <li

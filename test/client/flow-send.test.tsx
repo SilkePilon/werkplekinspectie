@@ -309,6 +309,24 @@ describe('sending', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  test('an inspection over the 12 MB body limit is not queued or sent: back to the summary with a message', async () => {
+    const user = setup();
+    const big = `data:image/jpeg;base64,${'A'.repeat(1_400_000)}`;
+    const d = await seed(
+      { ...allJa(), '1A': 'nee', '2A': 'nee', '3A': 'nee' },
+      { '1A': nee([big, big, big]), '2A': nee([big, big, big]), '3A': nee([big, big, big]) },
+    );
+    await user.click(await readyToSend(user));
+
+    expect(await screen.findByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toBe(
+      "De inspectie is te groot om te versturen. Verwijder een paar foto's.",
+    );
+    expect(posts()).toEqual([]);
+    expect(await listOutbox()).toEqual([]);
+    expect((await draftOnDisk())?.id).toBe(d.id);
+  });
+
   test('an incomplete draft is not sent: back to the summary', async () => {
     const user = setup();
     const answers = allJa();
@@ -325,7 +343,7 @@ describe('sending', () => {
 
 describe('result screens', () => {
   test.each([
-    [429, 'te_veel', 'Er zijn net te veel inspecties verstuurd. Probeer het over een kwartier opnieuw.'],
+    [429, 'te_veel', 'Er zijn net te veel inspecties verstuurd. Probeer het later opnieuw.'],
     [502, 'mail_mislukt', 'Versturen is niet gelukt. Probeer het later opnieuw.'],
     [500, 'onbekend', 'Versturen is niet gelukt. Probeer het later opnieuw.'],
     [403, 'verboden', 'Versturen is niet gelukt. Probeer het later opnieuw.'],
@@ -341,6 +359,43 @@ describe('result screens', () => {
     expect(button('Opnieuw proberen')).toBeTruthy();
     expect(button('Later versturen')).toBeTruthy();
     expect(await listOutbox()).toHaveLength(1);
+  });
+
+  test('no answer in time: "Versturen duurde te lang", reassurance, retry or later; kept in the outbox', async () => {
+    const user = setup();
+    inspecties = (init) =>
+      new Promise((_resolve, reject) =>
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))),
+      );
+    await seed();
+    await user.click(await readyToSend(user));
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    await act(() => vi.advanceTimersByTimeAsync(181_000));
+
+    expect(await screen.findByRole('heading', { name: 'Nog niet verstuurd' })).toBeTruthy();
+    expect(screen.getByText('Versturen duurde te lang.')).toBeTruthy();
+    expect(screen.queryByText('Je hebt nu geen internet.')).toBeNull();
+    expect(screen.getByText(SAFE)).toBeTruthy();
+    expect(button('Opnieuw proberen')).toBeTruthy();
+    expect(button('Later versturen')).toBeTruthy();
+    expect(await listOutbox()).toHaveLength(1);
+  });
+
+  test('413 te_groot: says to remove photos; "Aanpassen" brings it back into the draft', async () => {
+    const user = setup();
+    inspecties = reply(413, { status: 'te_groot' });
+    const d = await seed({ ...allJa(), '4B': 'nee' }, { '4B': nee([PHOTO]) });
+    await user.click(await readyToSend(user));
+
+    expect(await screen.findByRole('heading', { name: 'Nog niet verstuurd' })).toBeTruthy();
+    expect(screen.getByText('De inspectie is te groot om te versturen.')).toBeTruthy();
+    expect(screen.getByText("Verwijder een paar foto's en probeer het opnieuw.")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Opnieuw proberen' })).toBeNull();
+    await user.click(button('Aanpassen'));
+
+    expect(await screen.findByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
+    expect(await listOutbox()).toEqual([]);
+    expect(await draftOnDisk()).toMatchObject({ id: d.id, declaration: false });
   });
 
   test('400 ongeldig: "Aanpassen" takes it out of the outbox into the draft, highlights the item, asks to sign again', async () => {

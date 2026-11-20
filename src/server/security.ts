@@ -99,6 +99,9 @@ export async function securityHeaders(app: FastifyInstance): Promise<void> {
       directives: {
         defaultSrc: ["'self'"],
         imgSrc: ["'self'", 'blob:', 'data:'],
+        // Radix Dialog's scroll lock (react-remove-scroll) adds a <style> element at runtime.
+        // Scripts stay 'self' only.
+        styleSrc: ["'self'", "'unsafe-inline'"],
         fontSrc: ["'self'"],
         connectSrc: ["'self'"],
         workerSrc: ["'self'"],

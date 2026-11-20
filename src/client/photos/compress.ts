@@ -1,4 +1,5 @@
-// Shrinks a photo on the phone before it goes into the draft: max 1600px, JPEG at quality 0.7.
+// Shrinks a photo on the phone before it goes into the draft: max 1600px and 0.55 MB, JPEG at
+// quality 0.7. 15 photos of 0.55 MB plus the signature stay under the 12 MB body limit.
 import imageCompression from 'browser-image-compression';
 import { LIMITS } from '@shared/schema';
 
@@ -26,10 +27,12 @@ export async function compressPhoto(file: File): Promise<string> {
   let url: string;
   try {
     const blob = await imageCompression(file, {
+      maxSizeMB: 0.55,
       maxWidthOrHeight: 1600,
       initialQuality: 0.7,
       fileType: 'image/jpeg',
-      useWebWorker: true,
+      // The worker would load the library from a CDN, which the CSP (rightly) blocks.
+      useWebWorker: false,
     });
     // The server refuses larger photos; better to say so now than at sending time.
     if (blob.size > LIMITS.photoBytes) throw new PhotoError();

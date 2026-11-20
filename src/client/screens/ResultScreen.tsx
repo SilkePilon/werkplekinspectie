@@ -23,12 +23,24 @@ export interface ResultScreenProps {
   onFix: () => void;
 }
 
-const NOT_SENT: Record<Exclude<SubmitOutcome, 'verzonden' | 'ongeldig'>, string> = {
+/** Not sent, but nothing to change: the same inspection can simply be sent again. */
+const NOT_SENT: Record<Exclude<SubmitOutcome, 'verzonden' | NeedsFix>, string> = {
   offline: 'Je hebt nu geen internet.',
-  te_veel: 'Er zijn net te veel inspecties verstuurd. Probeer het over een kwartier opnieuw.',
+  traag: 'Versturen duurde te lang.',
+  te_veel: 'Er zijn net te veel inspecties verstuurd. Probeer het later opnieuw.',
   mail_mislukt: 'Versturen is niet gelukt. Probeer het later opnieuw.',
   onbekend: 'Versturen is niet gelukt. Probeer het later opnieuw.',
 };
+
+/** Refused by the server: the inspection has to change first ("Aanpassen"). */
+type NeedsFix = 'ongeldig' | 'te_groot';
+const NEEDS_FIX: Record<NeedsFix, string[]> = {
+  ongeldig: ['Er klopt iets niet in de inspectie.'],
+  te_groot: ['De inspectie is te groot om te versturen.', "Verwijder een paar foto's en probeer het opnieuw."],
+};
+const needsFix = (o: SubmitOutcome): o is NeedsFix => o in NEEDS_FIX;
+
+const BADGE: Partial<Record<SubmitOutcome, keyof typeof ICONS>> = { offline: 'offline', traag: 'clock', te_veel: 'clock' };
 
 function stats(s: Submission) {
   let nee = 0;
@@ -76,7 +88,7 @@ export function ResultScreen({
     );
   }
 
-  if (outcome === 'ongeldig') {
+  if (needsFix(outcome)) {
     return (
       <Layout
         badge={<NotSentBadge icon="alert" />}
@@ -94,7 +106,11 @@ export function ResultScreen({
           )
         }
       >
-        <p className="m-0 text-[17px] text-sub">Er klopt iets niet in de inspectie.</p>
+        {NEEDS_FIX[outcome].map((line) => (
+          <p key={line} className="m-0 mb-1.5 text-[17px] text-sub">
+            {line}
+          </p>
+        ))}
         {otherDraftOpen && (
           <p className="m-0 mt-[18px] rounded-[14px] bg-lila px-3.5 py-3 text-[15px] font-bold text-violet">
             Maak eerst je andere inspectie af of gooi hem weg.
@@ -106,7 +122,7 @@ export function ResultScreen({
 
   return (
     <Layout
-      badge={<NotSentBadge icon={outcome === 'offline' ? 'offline' : outcome === 'te_veel' ? 'clock' : 'alert'} />}
+      badge={<NotSentBadge icon={BADGE[outcome] ?? 'alert'} />}
       title="Nog niet verstuurd"
       headingRef={heading}
       footer={

@@ -572,6 +572,8 @@ describe('security headers', () => {
   const CSP_DIRECTIVES = [
     "default-src 'self'",
     "img-src 'self' blob: data:",
+    // Radix Dialog's scroll lock adds a <style> element at runtime.
+    "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "connect-src 'self'",
     "worker-src 'self'",

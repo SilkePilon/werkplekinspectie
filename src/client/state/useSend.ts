@@ -2,9 +2,9 @@
 // The order of the steps is what keeps work safe: see sendDraft.
 import { useCallback, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
-import type { Submission } from '@shared/schema';
+import { LIMITS, type Submission } from '@shared/schema';
 import type { Screen } from '../App';
-import { submitInspection, type SubmitOutcome } from '../api/submit';
+import { bodyBytes, submissionBody, submitInspection, type SubmitOutcome } from '../api/submit';
 import { addToOutbox, clearDraft, removeFromOutbox, saveDraft } from '../storage/db';
 import { IncompleteDraftError, draftFromSubmission, draftReducer, toSubmission, type Draft } from './draft';
 
@@ -84,8 +84,8 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
   );
 
   /**
-   * "Verstuur inspectie". Sign; build the submission; put it in the outbox; only then clear the
-   * draft; send. Killing the app at any point leaves the inspection either in the draft or in
+   * "Verstuur inspectie". Sign; build the submission; check it fits the body limit; put it in
+   * the outbox; only then clear the draft; send. Killing the app at any point leaves the inspection either in the draft or in
    * the outbox. If the outbox write fails, the draft stays and nothing is sent.
    */
   const sendDraft = useCallback(
@@ -108,6 +108,12 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
               if (!(err instanceof IncompleteDraftError)) throw err;
               schedule(signed);
               navigate({ name: 'summary' });
+              return;
+            }
+            // The server would refuse it (413) and it would sit in the outbox: say so now.
+            if (bodyBytes(submissionBody(sub)) > LIMITS.bodyBytes) {
+              schedule(signed);
+              navigate({ name: 'summary', tooLarge: true });
               return;
             }
             try {

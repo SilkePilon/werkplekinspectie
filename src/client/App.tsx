@@ -26,8 +26,11 @@ export type Screen =
   | { name: 'start' }
   | { name: 'question'; id: QuestionId; returnTo?: 'summary' }
   | { name: 'goodPractice'; returnTo?: 'summary' }
-  /** `highlight`: the question the server named when it refused the inspection. */
-  | { name: 'summary'; highlight?: QuestionId }
+  /**
+   * `highlight`: the question the server named when it refused the inspection.
+   * `tooLarge`: sending stopped because the inspection is over the body limit.
+   */
+  | { name: 'summary'; highlight?: QuestionId; tooLarge?: boolean }
   | { name: 'signature' }
   /** Not kept in history: back from here goes to the start screen. */
   | { name: 'result'; outcome: SubmitOutcome; submissionId: string };
@@ -262,6 +265,7 @@ export function App() {
           <SummaryScreen
             draft={draft}
             highlight={screen.highlight}
+            tooLarge={screen.tooLarge === true}
             onEdit={(id) => navigate({ name: 'question', id, returnTo: 'summary' })}
             onEditGoodPractice={() => navigate({ name: 'goodPractice', returnTo: 'summary' })}
             onNext={() => navigate({ name: 'signature' })}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Submission } from '@shared/schema';
-import { submitInspection } from '../../src/client/api/submit';
+import { sendTimeoutMs, submitInspection } from '../../src/client/api/submit';
 
 const SUB = { submissionId: '6a1f0c1e-0000-4000-8000-000000000001', project: 'Voorbeeld B.V.' } as Submission;
 
@@ -38,7 +38,7 @@ describe('maps the response to an outcome', () => {
     [429, { status: 'te_veel' }, 'te_veel'],
     [502, { status: 'mail_mislukt' }, 'mail_mislukt'],
     [403, { status: 'verboden' }, 'onbekend'],
-    [413, { status: 'te_groot' }, 'onbekend'],
+    [413, { status: 'te_groot' }, 'te_groot'],
     [415, { status: 'niet_ondersteund' }, 'onbekend'],
     [500, { status: 'onbekend' }, 'onbekend'],
     [503, {}, 'onbekend'],
@@ -71,16 +71,22 @@ test('a rejected fetch → offline', async () => {
   expect(await submitInspection(SUB)).toEqual({ outcome: 'offline' });
 });
 
-test('a fetch that hangs → offline after timeoutMs, and the request is aborted', async () => {
-  vi.useFakeTimers();
-  let signal: AbortSignal | undefined;
+/** A fetch that never answers, but rejects like the browser once its signal aborts. */
+function hangingFetch(onSignal: (s: AbortSignal | undefined) => void = () => undefined) {
   fetchMock.mockImplementation(
     (_url, init) =>
       new Promise((_resolve, reject) => {
-        signal = init?.signal ?? undefined;
+        const signal = init?.signal ?? undefined;
+        onSignal(signal);
         signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
       }),
   );
+}
+
+test('a fetch that hangs → traag after timeoutMs, and the request is aborted', async () => {
+  vi.useFakeTimers();
+  let signal: AbortSignal | undefined;
+  hangingFetch((s) => (signal = s));
   let result: unknown;
   void submitInspection(SUB, { timeoutMs: 5000 }).then((r) => (result = r));
 
@@ -89,21 +95,51 @@ test('a fetch that hangs → offline after timeoutMs, and the request is aborted
   expect(signal?.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
   expect(signal?.aborted).toBe(true);
-  expect(result).toEqual({ outcome: 'offline' });
+  expect(result).toEqual({ outcome: 'traag' });
 });
 
-test('the default timeout is 30 seconds', async () => {
+describe('sendTimeoutMs', () => {
+  test('30 s plus 1 s per 25 kB of body, at most 180 s', () => {
+    expect(sendTimeoutMs(0)).toBe(30_000);
+    expect(sendTimeoutMs(25_000)).toBe(31_000);
+    expect(sendTimeoutMs(2_500_000)).toBe(130_000);
+    expect(sendTimeoutMs(3_750_000)).toBe(180_000);
+    expect(sendTimeoutMs(12_000_000)).toBe(180_000);
+  });
+});
+
+test('the default timeout grows with the body: a 2.5 MB inspection gets about 130 s', async () => {
   vi.useFakeTimers();
-  fetchMock.mockImplementation(
-    (_url, init) =>
-      new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
-      }),
-  );
+  hangingFetch();
+  const big = { ...SUB, project: 'x'.repeat(2_500_000) } as Submission;
+  const limit = sendTimeoutMs(new TextEncoder().encode(JSON.stringify(big)).length);
+  expect(limit).toBeGreaterThan(130_000);
+  let result: unknown;
+  void submitInspection(big).then((r) => (result = r));
+  await vi.advanceTimersByTimeAsync(limit - 1);
+  expect(result).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(result).toEqual({ outcome: 'traag' });
+});
+
+test('the default timeout is never longer than 180 s', async () => {
+  vi.useFakeTimers();
+  hangingFetch();
+  let result: unknown;
+  void submitInspection({ ...SUB, project: 'x'.repeat(11_000_000) } as Submission).then((r) => (result = r));
+  await vi.advanceTimersByTimeAsync(179_999);
+  expect(result).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(result).toEqual({ outcome: 'traag' });
+});
+
+test('a small inspection still gets 30 s', async () => {
+  vi.useFakeTimers();
+  hangingFetch();
   let result: unknown;
   void submitInspection(SUB).then((r) => (result = r));
   await vi.advanceTimersByTimeAsync(29_999);
   expect(result).toBeUndefined();
-  await vi.advanceTimersByTimeAsync(1);
-  expect(result).toEqual({ outcome: 'offline' });
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(result).toEqual({ outcome: 'traag' });
 });
