@@ -8,7 +8,7 @@ export interface NeeDetails {
   comment: string;
   /** YYYY-MM-DD, '' until picked. */
   actionBefore: string;
-  /** data URLs (JPEG or PNG) */
+  /** JPEG data URLs, as compressPhoto makes them. */
   photos: string[];
 }
 

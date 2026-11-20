@@ -25,7 +25,7 @@ export type Answer =
       comment: string;
       /** YYYY-MM-DD */
       actionBefore: string;
-      /** data URLs (JPEG or PNG) */
+      /** JPEG data URLs (the phone always compresses to JPEG). */
       photos: string[];
     };
 
@@ -73,7 +73,8 @@ function requiredText(max: number) {
     .refine((s) => s.trim().length > 0, { message: 'Mag niet leeg zijn' });
 }
 
-const photo = dataUrl(['data:image/jpeg;base64,', 'data:image/png;base64,'], LIMITS.photoBytes);
+// JPEG only: pdfkit embeds JPEG as is, while a PNG's pixel data is inflated in full.
+const photo = dataUrl(['data:image/jpeg;base64,'], LIMITS.photoBytes);
 const signature = dataUrl(['data:image/png;base64,'], LIMITS.signatureBytes);
 
 const answerSchema = z.discriminatedUnion('answer', [

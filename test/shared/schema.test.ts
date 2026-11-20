@@ -108,7 +108,7 @@ describe('submissionSchema', () => {
     expect(r.error?.issues.map((i) => i.path.join('.'))).toContain('answers');
   });
 
-  test('rejects a photo that is not a JPEG/PNG data URL', () => {
+  test('rejects a photo that is not a JPEG data URL', () => {
     const s = validSubmission();
     s.answers['1A'] = nee({ photos: ['data:image/gif;base64,R0lGODlh'] });
     expect(ok(s)).toBe(false);
@@ -116,10 +116,11 @@ describe('submissionSchema', () => {
     expect(ok(s)).toBe(false);
   });
 
-  test('accepts a PNG photo', () => {
+  // The phone always sends JPEG; a PNG photo could hide a decompression bomb from the PDF step.
+  test('rejects a PNG photo', () => {
     const s = validSubmission();
     s.answers['1A'] = nee({ photos: ['data:image/png;base64,iVBORw0KGgo='] });
-    expect(ok(s)).toBe(true);
+    expect(ok(s)).toBe(false);
   });
 
   test('rejects a photo larger than the byte limit', () => {

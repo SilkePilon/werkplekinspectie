@@ -13,7 +13,7 @@ import Fastify, {
 } from 'fastify';
 import type { z } from 'zod';
 import type { Config } from './config.js';
-import { InvalidImageError, decodeDataUrl, imageSize } from './images.js';
+import { InvalidImageError, checkPngPixels, decodeDataUrl, imageSize } from './images.js';
 import { buildMail } from './mail/build.js';
 import type { Mailer } from './mail/send.js';
 import { renderInspectionPdf } from './pdf/render.js';
@@ -134,13 +134,18 @@ function imageChecks(sub: Submission): ImageCheck[] {
   ];
 }
 
-/** Decodes the image and checks type, byte size and pixel size. The bytes are not kept. */
+/**
+ * Decodes the image and checks type, byte size and pixel size; for a PNG also that its
+ * pixel data inflates to no more than that size (no decompression bomb). The bytes are not kept.
+ */
 function imageFits(check: ImageCheck): boolean {
   try {
     const { kind, data } = decodeDataUrl(check.url);
     if (data.length > check.maxBytes) return false;
     const { width, height } = imageSize(data, kind);
-    return width <= check.maxWidth && height <= check.maxHeight;
+    if (width > check.maxWidth || height > check.maxHeight) return false;
+    if (kind === 'png') checkPngPixels(data);
+    return true;
   } catch (err) {
     if (err instanceof InvalidImageError) return false;
     throw err;

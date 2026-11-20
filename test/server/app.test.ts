@@ -10,7 +10,8 @@ import type { MailMessage } from '../../src/server/mail/build.js';
 import type { Mailer } from '../../src/server/mail/send.js';
 import type { renderInspectionPdf } from '../../src/server/pdf/render.js';
 import type { Answer, Submission } from '../../src/shared/schema.js';
-import { PNG_DATA_URL, makeSubmission } from '../fixtures/submission.js';
+import { makePng, pngDataUrl } from '../fixtures/png.js';
+import { JPEG_DATA_URL, PNG_DATA_URL, makeSubmission } from '../fixtures/submission.js';
 
 const cfg = loadConfig({
   MAIL_TO: 'vgm@example.com',
@@ -29,16 +30,16 @@ const MANIFEST = '{"name":"Werkplekinspectie"}';
 const GIF_1X1 = 'R0lGODlhAQABAPAAAEMZYQAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
 const SVG_LOGO = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
 
-/** A PNG data URL that is only a signature plus an IHDR header claiming the given size. */
-function pngDataUrl(width: number, height: number): string {
-  const head = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const ihdr = Buffer.alloc(25);
-  ihdr.writeUInt32BE(13, 0);
-  ihdr.write('IHDR', 4, 'latin1');
-  ihdr.writeUInt32BE(width, 8);
-  ihdr.writeUInt32BE(height, 12);
-  return `data:image/png;base64,${Buffer.concat([head, ihdr]).toString('base64')}`;
+/** A JPEG data URL that is only SOI plus a frame header claiming the given size. */
+function jpegDataUrl(width: number, height: number): string {
+  const frame = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0, 0, 0, 0, 0x01, 0x01, 0x11, 0x00]);
+  frame.writeUInt16BE(height, 7);
+  frame.writeUInt16BE(width, 9);
+  return `data:image/jpeg;base64,${frame.toString('base64')}`;
 }
+
+/** A real (all transparent) RGBA PNG of the given size, as the signature pad exports. */
+const signaturePng = (width: number, height: number) => pngDataUrl(makePng({ width, height }));
 
 interface FakeMailer extends Mailer {
   sent: MailMessage[];
@@ -256,9 +257,9 @@ describe('POST /api/inspecties', () => {
     expect(mailer.sent).toHaveLength(1);
   });
 
-  test('a photo with a PNG prefix but GIF bytes gives 400 naming the photo', async () => {
+  test('a photo with a JPEG prefix but GIF bytes gives 400 naming the photo', async () => {
     const { app, mailer } = await setup();
-    const res = await post(app, with4B({ photos: [PNG_DATA_URL, `data:image/png;base64,${GIF_1X1}`] }));
+    const res = await post(app, with4B({ photos: [JPEG_DATA_URL, `data:image/jpeg;base64,${GIF_1X1}`] }));
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ status: 'ongeldig', fields: ['answers.4B.photos.1'] });
     expect(mailer.sent).toHaveLength(0);
@@ -277,7 +278,7 @@ describe('POST /api/inspecties', () => {
     [10000, 10000],
   ])('a %ix%i photo is rejected as too large', async (w, h) => {
     const { app, mailer } = await setup();
-    const res = await post(app, with4B({ photos: [pngDataUrl(w, h)] }));
+    const res = await post(app, with4B({ photos: [jpegDataUrl(w, h)] }));
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ status: 'ongeldig', fields: ['answers.4B.photos.0'] });
     expect(mailer.sent).toHaveLength(0);
@@ -285,7 +286,7 @@ describe('POST /api/inspecties', () => {
 
   test('a 2000x2000 photo and a 2400x1600 signature are accepted', async () => {
     const { app, mailer } = await setup();
-    const res = await post(app, with4B({ photos: [pngDataUrl(2000, 2000)] }, { signature: pngDataUrl(2400, 1600) }));
+    const res = await post(app, with4B({ photos: [jpegDataUrl(2000, 2000)] }, { signature: signaturePng(2400, 1600) }));
     expect(res.statusCode).toBe(200);
     expect(mailer.sent).toHaveLength(1);
   });
@@ -295,9 +296,36 @@ describe('POST /api/inspecties', () => {
     [100, 1601],
   ])('a %ix%i signature is rejected as too large', async (w, h) => {
     const { app } = await setup();
-    const res = await post(app, makeSubmission({ signature: pngDataUrl(w, h) }));
+    const res = await post(app, makeSubmission({ signature: signaturePng(w, h) }));
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ status: 'ongeldig', fields: ['signature'] });
+  });
+
+  test('a valid PNG photo is refused: photos are JPEG only', async () => {
+    const { app, mailer } = await setup();
+    const res = await post(app, with4B({ photos: [PNG_DATA_URL] }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['answers.4B.photos.0'] });
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('a decompression-bomb signature (10x10, pixel data inflating to 64 MB) is refused before the PDF', async () => {
+    const { app, mailer, renderPdf } = await setup();
+    const bomb = makePng({ width: 10, height: 10, rawBytes: 64 * 1024 * 1024 });
+    expect(bomb.length).toBeLessThan(300_000);
+    const res = await post(app, makeSubmission({ signature: pngDataUrl(bomb) }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['signature'] });
+    expect(renderPdf).not.toHaveBeenCalled();
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('an interlaced signature PNG is refused', async () => {
+    const { app, renderPdf } = await setup();
+    const res = await post(app, makeSubmission({ signature: pngDataUrl(makePng({ width: 20, height: 10, interlace: 1 })) }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['signature'] });
+    expect(renderPdf).not.toHaveBeenCalled();
   });
 
   test('a body over 12 MB gives 413 te_groot', async () => {
@@ -333,7 +361,7 @@ describe('other routes', () => {
 
   test.each([
     ['svg', SVG_LOGO, 'image/svg+xml'],
-    ['png', Buffer.from(pngDataUrl(10, 10).split(',')[1]!, 'base64'), 'image/png'],
+    ['png', makePng({ width: 10, height: 10 }), 'image/png'],
   ] as const)('GET /api/branding/logo serves a %s logo with its content type', async (kind, data, type) => {
     const { app } = await setup({ logo: { data, kind } });
     const res = await app.inject({ method: 'GET', url: '/api/branding/logo' });

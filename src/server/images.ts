@@ -1,6 +1,8 @@
 // Turns the photo and signature data URLs from a submission into raw bytes, checks
 // that the bytes really are a JPEG or PNG, and reads the pixel size from the header
-// so oversized images (decompression bombs) are refused before they reach the PDF.
+// so oversized images are refused before they reach the PDF. For PNG the pixel data
+// is also inflated, with a hard cap, because pdfkit inflates it without any limit.
+import { inflateSync } from 'node:zlib';
 
 export type ImageKind = 'jpeg' | 'png';
 
@@ -109,4 +111,62 @@ export function imageSize(data: Buffer, kind: ImageKind): ImageSize {
     throw new InvalidImageError('Afmetingen van de afbeelding niet leesbaar');
   }
   return size;
+}
+
+/** Channels per pixel and the bit depths the PNG spec allows, per colour type. */
+const PNG_COLOR_TYPES: Partial<Record<number, { channels: number; depths: number[] }>> = {
+  0: { channels: 1, depths: [1, 2, 4, 8, 16] },
+  2: { channels: 3, depths: [8, 16] },
+  3: { channels: 1, depths: [1, 2, 4, 8] },
+  4: { channels: 2, depths: [8, 16] },
+  6: { channels: 4, depths: [8, 16] },
+};
+
+/** All IDAT data, in order, up to IEND. Undefined if a chunk runs past the end or IEND is missing. */
+function pngImageData(data: Buffer): Buffer | undefined {
+  const idat: Buffer[] = [];
+  let pos = 8;
+  while (pos + 12 <= data.length) {
+    const length = data.readUInt32BE(pos);
+    const type = data.toString('latin1', pos + 4, pos + 8);
+    const end = pos + 8 + length;
+    if (end + 4 > data.length) return undefined;
+    if (type === 'IDAT') idat.push(data.subarray(pos + 8, end));
+    if (type === 'IEND') return Buffer.concat(idat);
+    pos = end + 4;
+  }
+  return undefined;
+}
+
+/**
+ * Inflates the PNG pixel data with a cap of exactly what the header's size needs, and
+ * refuses the image unless it inflates to exactly that. Interlaced PNGs are refused.
+ * This stops decompression bombs: a tiny file whose pixel data inflates to gigabytes.
+ * Throws InvalidImageError.
+ */
+export function checkPngPixels(data: Buffer): void {
+  const { width, height } = imageSize(data, 'png');
+  if (data.length < 33) throw new InvalidImageError('PNG-header te kort');
+  const bitDepth = data.readUInt8(24);
+  const format = PNG_COLOR_TYPES[data.readUInt8(25)];
+  if (format === undefined || !format.depths.includes(bitDepth)) {
+    throw new InvalidImageError('Onbekend PNG-kleurtype');
+  }
+  // Compression and filter method must be 0; interlacing is not accepted.
+  if (data.readUInt8(26) !== 0 || data.readUInt8(27) !== 0 || data.readUInt8(28) !== 0) {
+    throw new InvalidImageError('PNG-indeling niet ondersteund');
+  }
+
+  const idat = pngImageData(data);
+  if (idat === undefined || idat.length === 0) throw new InvalidImageError('PNG zonder pixeldata');
+
+  const expected = height * (1 + Math.ceil((width * format.channels * bitDepth) / 8));
+  let pixels: Buffer;
+  try {
+    // Stops with an error as soon as the output would grow past `expected`.
+    pixels = inflateSync(idat, { maxOutputLength: expected });
+  } catch {
+    throw new InvalidImageError('PNG-pixeldata ongeldig of te groot');
+  }
+  if (pixels.length !== expected) throw new InvalidImageError('PNG-pixeldata past niet bij de afmetingen');
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { InvalidImageError, decodeDataUrl, imageSize } from '../../src/server/images.js';
+import { InvalidImageError, checkPngPixels, decodeDataUrl, imageSize } from '../../src/server/images.js';
+import { makePng, pngChunk } from '../fixtures/png.js';
 
 // 1×1 pixels in brand violet, generated with ImageMagick (`convert -size 1x1 xc:'#431961' -strip`).
 const PNG_1X1 =
@@ -156,5 +157,75 @@ describe('imageSize', () => {
     ['a JPEG that is only SOI', Buffer.from([0xff, 0xd8]), 'jpeg'],
   ] as const)('throws InvalidImageError on %s', (_name, data, kind) => {
     expect(() => imageSize(data, kind)).toThrow(InvalidImageError);
+  });
+});
+
+describe('checkPngPixels', () => {
+  test('accepts the real 1x1 palette PNG fixture', () => {
+    expect(() => checkPngPixels(Buffer.from(PNG_1X1, 'base64'))).not.toThrow();
+  });
+
+  test.each([
+    ['RGBA 8-bit, as a canvas exports it', { width: 600, height: 200 }],
+    ['grey 1-bit with a width that is not a multiple of 8', { width: 13, height: 7, colorType: 0, bitDepth: 1 }],
+    ['RGB 16-bit', { width: 10, height: 10, colorType: 2, bitDepth: 16 }],
+    ['palette 4-bit', { width: 9, height: 3, colorType: 3, bitDepth: 4 }],
+    ['grey+alpha 8-bit', { width: 5, height: 5, colorType: 4 }],
+    ['pixel data over several IDAT chunks', { width: 300, height: 300, idatChunks: 4 }],
+  ])('accepts a PNG with %s', (_name, opts) => {
+    expect(() => checkPngPixels(makePng(opts))).not.toThrow();
+  });
+
+  test('refuses a decompression bomb: a 10x10 RGBA PNG whose pixel data inflates to 64 MB', () => {
+    const bomb = makePng({ width: 10, height: 10, rawBytes: 64 * 1024 * 1024 });
+    expect(bomb.length).toBeLessThan(300_000);
+    const before = process.memoryUsage().rss;
+    expect(() => checkPngPixels(bomb)).toThrow(InvalidImageError);
+    // Inflating stops at the 410 bytes the header allows; nothing near 64 MB is allocated.
+    expect(process.memoryUsage().rss - before).toBeLessThan(32 * 1024 * 1024);
+  });
+
+  test('refuses pixel data that inflates to one byte more than the size allows', () => {
+    expect(() => checkPngPixels(makePng({ width: 10, height: 10, rawBytes: 411 }))).toThrow(InvalidImageError);
+  });
+
+  test('refuses pixel data that is shorter than the size needs', () => {
+    expect(() => checkPngPixels(makePng({ width: 10, height: 10, rawBytes: 409 }))).toThrow(InvalidImageError);
+  });
+
+  test('refuses an interlaced PNG', () => {
+    expect(() => checkPngPixels(makePng({ width: 10, height: 10, interlace: 1 }))).toThrow(InvalidImageError);
+  });
+
+  test.each([
+    ['an unknown colour type', { width: 4, height: 4, colorType: 5, rawBytes: 20 }],
+    ['a bit depth RGBA does not allow', { width: 4, height: 4, colorType: 6, bitDepth: 4 }],
+    ['no IEND chunk', { width: 4, height: 4, noEnd: true }],
+  ])('refuses a PNG with %s', (_name, opts) => {
+    expect(() => checkPngPixels(makePng(opts))).toThrow(InvalidImageError);
+  });
+
+  test('refuses a PNG without any IDAT chunk', () => {
+    const png = makePng({ width: 4, height: 4 });
+    const ihdrEnd = 8 + 25;
+    const noIdat = Buffer.concat([png.subarray(0, ihdrEnd), pngChunk('IEND')]);
+    expect(() => checkPngPixels(noIdat)).toThrow(InvalidImageError);
+  });
+
+  test('refuses a PNG whose chunk length runs past the end of the file', () => {
+    const png = makePng({ width: 4, height: 4 });
+    png.writeUInt32BE(0x7fffffff, 8 + 25);
+    expect(() => checkPngPixels(png)).toThrow(InvalidImageError);
+  });
+
+  test('refuses pixel data that is not a zlib stream', () => {
+    const png = makePng({ width: 4, height: 4 });
+    const idatData = 8 + 25 + 8;
+    png.fill(0xaa, idatData, idatData + 4);
+    expect(() => checkPngPixels(png)).toThrow(InvalidImageError);
+  });
+
+  test('refuses a header-only PNG', () => {
+    expect(() => checkPngPixels(pngHeader(10, 10))).toThrow(InvalidImageError);
   });
 });
