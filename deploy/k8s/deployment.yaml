@@ -12,11 +12,11 @@ spec:
   # geheugen van de pod. Met meer replica's krijgt elke pod zijn eigen tellers en lijst.
   replicas: 1
   revisionHistoryLimit: 3
+  # Recreate, not RollingUpdate: tijdens een rolling update draaien er even twee pods, elk met
+  # een eigen lijst van verstuurde inzendingen, dus kan een herhaalde poging een tweede mail
+  # geven. Recreate stopt eerst de oude pod; een update geeft dan een paar seconden geen service.
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: werkplekinspectie

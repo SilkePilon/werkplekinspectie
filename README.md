@@ -36,7 +36,9 @@ De app en de server draaien samen in één container. Het image wordt automatisc
 - Samenvatting met *Aanpassen*, een vak voor goede punten, en een handtekening.
 - Elke tik wordt automatisch opgeslagen. Lukt versturen niet, dan komt de inspectie in een wachtrij
   (*Later versturen*) en kan die later opnieuw verstuurd worden.
-- Twee keer tikken of opnieuw proberen geeft nooit twee mails.
+- Twee keer tikken of opnieuw proberen geeft geen tweede mail: de server onthoudt 24 uur welke inspecties al
+  verstuurd zijn. Die lijst staat alleen in het geheugen; na een herstart van de container is hij leeg, en
+  een poging die daarna nog eens binnenkomt wordt opnieuw gemaild.
 - De ontvanger krijgt een mail met een samenvatting en de PDF als bijlage.
 - Logo, bedrijfsnaam, adres en namen komen uit de configuratie, niet uit de code.
 
@@ -211,9 +213,13 @@ In de log hoort `smtp_ok` te staan. Staat er `smtp_verify_failed`, controleer da
 
 Goed om te weten:
 
-- De Deployment draait **precies één replica**. De rate limits en de lijst met al verstuurde inzendingen staan
-  in het geheugen van de pod. Met meer replica's heeft elke pod zijn eigen tellers. Na een herstart beginnen
-  de tellers opnieuw.
+- De Deployment draait **precies één replica**, met de strategie `Recreate`. De rate limits en de lijst met al
+  verstuurde inzendingen staan in het geheugen van de pod. Met meer replica's (of twee pods tegelijk tijdens
+  een rolling update) heeft elke pod zijn eigen tellers en lijst. Na een herstart beginnen de tellers en de
+  lijst opnieuw. Een update geeft daardoor een paar seconden geen service; de app op de telefoon houdt de
+  inspectie dan gewoon vast.
+- De server verwerkt maximaal 2 inspecties tegelijk (een derde krijgt even "te veel" en kan het zo opnieuw
+  proberen). Het geheugen is begrensd op 768Mi.
 - De container draait als gewone gebruiker, met een read-only filesystem, zonder extra rechten en zonder
   service-account-token. Alleen `/tmp` is schrijfbaar (een `emptyDir`).
 - Is het package op GHCR niet publiek, dan heeft k3s een `imagePullSecret` nodig. Zet het package na de eerste
