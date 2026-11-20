@@ -10,8 +10,8 @@ Hoe het eruitziet: open de ontwerpen in [`docs/design/mockups/`](docs/design/moc
 ([vragen](docs/design/mockups/flow-vragen.html) en [einde van de flow](docs/design/mockups/flow-einde.html))
 in je browser.
 
-De app en de server draaien samen in één container. Het image wordt automatisch gebouwd en staat op
-`ghcr.io/silkepilon/werkplekinspectie`.
+De app en de server draaien samen in één container. Het image wordt automatisch gebouwd, pas nadat alle
+controles in CI geslaagd zijn, en staat op `ghcr.io/silkepilon/werkplekinspectie`.
 
 ## Inhoud
 
