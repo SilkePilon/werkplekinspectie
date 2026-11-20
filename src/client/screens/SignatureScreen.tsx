@@ -9,14 +9,16 @@ import { useSignaturePad } from '../ui/useSignaturePad';
 export interface SignatureScreenProps {
   draft: Draft;
   dispatch: DraftDispatch;
-  /** Called right after the signature is stored in the draft. */
-  onSend: () => void;
+  /** "Verstuur inspectie" with the exported signature; signing and sending happen there. */
+  onSend: (signature: string, signedAt: string) => void;
+  /** Sending is running: the button shows a spinner and takes no taps. */
+  busy: boolean;
   onClose: () => void;
 }
 
 const DECLARATION = 'Ik heb deze inspectie zelf gedaan en de antwoorden kloppen.';
 
-export function SignatureScreen({ draft, dispatch, onSend, onClose }: SignatureScreenProps) {
+export function SignatureScreen({ draft, dispatch, onSend, busy, onClose }: SignatureScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { isEmpty, clear, exportPng } = useSignaturePad(canvasRef);
   const [tooBig, setTooBig] = useState(false);
@@ -28,8 +30,7 @@ export function SignatureScreen({ draft, dispatch, onSend, onClose }: SignatureS
       setTooBig(true);
       return;
     }
-    dispatch({ type: 'sign', signature, at: toIsoWithOffset(new Date()) });
-    onSend();
+    onSend(signature, toIsoWithOffset(new Date()));
   }
 
   function redo() {
@@ -91,7 +92,7 @@ export function SignatureScreen({ draft, dispatch, onSend, onClose }: SignatureS
       </main>
 
       <footer className="px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
-        <ChunkyButton disabled={isEmpty || !draft.declaration} onClick={send}>
+        <ChunkyButton busy={busy} disabled={isEmpty || !draft.declaration} onClick={send}>
           Verstuur inspectie
         </ChunkyButton>
       </footer>

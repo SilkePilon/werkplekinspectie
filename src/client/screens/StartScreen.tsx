@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { formatDate } from '@shared/dates';
 import { QUESTION_IDS } from '@shared/questions';
 import { LIMITS, type Submission } from '@shared/schema';
@@ -23,8 +23,10 @@ export interface StartScreenProps {
   onStart: (fields: StartFields) => void;
   onResume: () => void;
   onDiscard: () => void;
-  /** Wired in Task 13; the buttons stay disabled until then. */
-  onSendNow?: (s: Submission) => void;
+  /** "Nu versturen" on an outbox item. */
+  onSendNow: (s: Submission) => void;
+  /** The outbox item being sent right now, if any. */
+  sendingId: string | null;
 }
 
 const inputClass =
@@ -40,6 +42,7 @@ export function StartScreen({
   onResume,
   onDiscard,
   onSendNow,
+  sendingId,
 }: StartScreenProps) {
   const [monteur, setMonteur] = useState(rememberedName);
   const [editName, setEditName] = useState(rememberedName === '');
@@ -48,6 +51,7 @@ export function StartScreen({
   const [website, setWebsite] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const ids = { naam: useId(), project: useId(), nummer: useId(), hint: useId(), outbox: useId() };
+  const backOnline = useBackOnline();
 
   const complete = [monteur, project, projectnummer].every((v) => v.trim() !== '');
 
@@ -65,6 +69,17 @@ export function StartScreen({
       </header>
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
+        {outbox.length > 0 && backOnline && (
+          <p
+            role="status"
+            className="m-0 mb-3 flex items-center gap-2.5 rounded-chunky bg-lila px-3.5 py-3 text-[15px] font-extrabold text-violet"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12.6a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0M12 20h.01" />
+            </svg>
+            Je hebt weer internet. Je kunt je inspecties nu versturen.
+          </p>
+        )}
         {outbox.length > 0 && (
           <section aria-labelledby={ids.outbox} className="mb-6 rounded-chunky border-2 border-coral bg-roze p-4">
             <h2 id={ids.outbox} className="m-0 mb-3 text-[18px] font-black text-coral-d">
@@ -73,10 +88,13 @@ export function StartScreen({
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
               {outbox.map((s) => (
                 <li key={s.submissionId} className="flex flex-col gap-2">
-                  <span>
-                    {s.project} · {s.projectnummer} · {formatDate(s.startedAt)}
-                  </span>
-                  <ChunkyButton variant="line" disabled={!onSendNow} onClick={() => onSendNow?.(s)}>
+                  <span className="font-bold break-words">{`${s.project}, ${formatDate(s.startedAt)}`}</span>
+                  <ChunkyButton
+                    variant="line"
+                    busy={sendingId === s.submissionId}
+                    disabled={sendingId !== null}
+                    onClick={() => onSendNow(s)}
+                  >
                     Nu versturen
                   </ChunkyButton>
                 </li>
@@ -197,6 +215,22 @@ export function StartScreen({
       </Sheet>
     </form>
   );
+}
+
+/** True after the phone gets internet again, until it loses it. */
+function useBackOnline(): boolean {
+  const [back, setBack] = useState(false);
+  useEffect(() => {
+    const on = () => setBack(true);
+    const off = () => setBack(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+  return back;
 }
 
 function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {

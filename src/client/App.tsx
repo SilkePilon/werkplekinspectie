@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
 import type { Submission } from '@shared/schema';
+import type { SubmitOutcome } from './api/submit';
 import { GoodPracticeScreen } from './screens/GoodPracticeScreen';
 import { QuestionScreen } from './screens/QuestionScreen';
+import { ResultScreen } from './screens/ResultScreen';
 import { SignatureScreen } from './screens/SignatureScreen';
 import { StartScreen, type StartFields } from './screens/StartScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
 import { draftReducer, newDraft, nextUnanswered, type Draft, type DraftAction } from './state/draft';
 import { useAutosave } from './state/useAutosave';
+import { useSend } from './state/useSend';
 import {
   clearDraft,
   getRememberedName,
@@ -21,8 +24,11 @@ export type Screen =
   | { name: 'start' }
   | { name: 'question'; id: QuestionId; returnTo?: 'summary' }
   | { name: 'goodPractice'; returnTo?: 'summary' }
-  | { name: 'summary' }
-  | { name: 'signature' };
+  /** `highlight`: the question the server named when it refused the inspection. */
+  | { name: 'summary'; highlight?: QuestionId }
+  | { name: 'signature' }
+  /** Not kept in history: back from here goes to the start screen. */
+  | { name: 'result'; outcome: SubmitOutcome; submissionId: string };
 
 /**
  * An action, or a function that builds one from the draft as it is at that moment (for async
@@ -122,17 +128,22 @@ export function App() {
     setDraft(d);
   }, []);
 
+  const send = useSend({ draftRef, commit, schedule, cancelAutosave: cancel, navigate, setOutbox });
+  const { isSending } = send;
+
   const dispatch: DraftDispatch = useCallback(
     (update) => {
       const current = draftRef.current;
-      if (!current) return;
+      // While sending, the draft is on its way to the outbox: a change now would be lost or,
+      // through autosave, bring back the draft that sending clears.
+      if (!current || isSending()) return;
       const action = typeof update === 'function' ? update(current) : update;
       if (!action) return;
       const next = draftReducer(current, action);
       commit(next);
       schedule(next);
     },
-    [commit, schedule],
+    [commit, schedule, isSending],
   );
 
   function start(f: StartFields) {
@@ -167,16 +178,43 @@ export function App() {
     navigate(next ? { name: 'question', id: next } : { name: 'goodPractice' });
   }
 
+  function result(s: Extract<Screen, { name: 'result' }>) {
+    const { last } = send;
+    const sub =
+      last?.submission.submissionId === s.submissionId
+        ? last.submission
+        : outbox.find((o) => o.submissionId === s.submissionId);
+    if (!sub) return null;
+    return (
+      <ResultScreen
+        outcome={s.outcome}
+        submission={sub}
+        busy={send.sendingId === sub.submissionId}
+        onDone={() => navigate(START)}
+        onRetry={() => send.resend(sub)}
+        onLater={() => navigate(START)}
+        onFix={() => send.fix(sub, last?.submission === sub ? last.fields : undefined)}
+      />
+    );
+  }
+
   function body() {
     if (!loaded) return null;
-    // Every screen but the start needs a draft (e.g. back after Weggooien).
-    if (!draft || screen.name === 'start') {
+    if (screen.name === 'result') {
+      const shown = result(screen);
+      if (shown) return shown;
+    }
+    // Every screen but the start needs a draft (e.g. back after Weggooien). A result whose
+    // inspection is gone (not expected) also falls back to the start.
+    if (!draft || screen.name === 'start' || screen.name === 'result') {
       return (
         <StartScreen
           hasLogo={hasLogo}
           rememberedName={rememberedName}
           draft={draft}
           outbox={outbox}
+          sendingId={send.sendingId}
+          onSendNow={send.resend}
           onStart={start}
           onResume={resume}
           onDiscard={discard}
@@ -211,6 +249,7 @@ export function App() {
         return (
           <SummaryScreen
             draft={draft}
+            highlight={screen.highlight}
             onEdit={(id) => navigate({ name: 'question', id, returnTo: 'summary' })}
             onEditGoodPractice={() => navigate({ name: 'goodPractice', returnTo: 'summary' })}
             onNext={() => navigate({ name: 'signature' })}
@@ -222,8 +261,8 @@ export function App() {
           <SignatureScreen
             draft={draft}
             dispatch={dispatch}
-            // Task 13 sends the signed draft from here.
-            onSend={() => undefined}
+            onSend={send.sendDraft}
+            busy={send.sendingId !== null}
             onClose={() => navigate(START)}
           />
         );
@@ -232,7 +271,7 @@ export function App() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col">
-      {saveFailed && <SaveFailedAlert />}
+      {(saveFailed || send.storeFailed) && <SaveFailedAlert />}
       {body()}
     </div>
   );

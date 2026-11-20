@@ -7,12 +7,18 @@ const AUTOSAVE_MS = 300;
 /**
  * Saves ~300ms after the last change, and at once when asked (page hidden, unmount).
  * `failed` stays true from a failed save until the next one succeeds.
+ *
+ * Only the newest save may report back: an older save that finishes late never changes
+ * `failed` and never queues a retry. `cancel()` (after sending or Weggooien) makes every save
+ * still running count as old, and nothing is saved again until the next `schedule()`.
  */
 export function useAutosave() {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pending = useRef<Draft | null>(null);
   // The newest draft handed to schedule(): what a retry after a failed save must write.
   const latest = useRef<Draft | null>(null);
+  // Bumped by every save that starts and by cancel(); a save is current while it matches.
+  const seq = useRef(0);
   const [failed, setFailed] = useState(false);
 
   const flush = useCallback(() => {
@@ -21,11 +27,14 @@ export function useAutosave() {
     const d = pending.current;
     pending.current = null;
     if (!d) return;
+    const mine = ++seq.current;
     saveDraft(d).then(
-      () => setFailed(false),
       () => {
-        // Storage full or blocked. Retry at the next flush with the newest draft, never with
-        // `d`: a newer save may already be on its way, and `d` must not overwrite it.
+        if (mine === seq.current) setFailed(false);
+      },
+      () => {
+        if (mine !== seq.current) return;
+        // Storage full or blocked. Retry at the next flush with the newest draft.
         pending.current ??= latest.current;
         setFailed(true);
       },
@@ -47,6 +56,7 @@ export function useAutosave() {
     timer.current = undefined;
     pending.current = null;
     latest.current = null;
+    seq.current += 1;
     setFailed(false);
   }, []);
 

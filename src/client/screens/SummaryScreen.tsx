@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode, type Ref } from 'react';
 import { formatDayShort } from '@shared/dates';
 import { QUESTIONS, SECTIONS, type QuestionId, type Section } from '@shared/questions';
 import { counts, missingFields, type AnswerValue, type Draft } from '../state/draft';
@@ -11,6 +11,8 @@ export interface SummaryScreenProps {
   /** Opens a question; after changing it the app comes back here. */
   onEdit: (id: QuestionId) => void;
   onEditGoodPractice: () => void;
+  /** A question to point out: the server said something is wrong with it. */
+  highlight?: QuestionId;
   /** "Alles klopt, naar tekenen". */
   onNext: () => void;
   onClose: () => void;
@@ -43,11 +45,15 @@ function incompleteQuestions(draft: Draft): Set<QuestionId> {
 
 const photoCount = (n: number) => (n === 1 ? '1 foto' : `${n} foto's`);
 
-export function SummaryScreen({ draft, onEdit, onEditGoodPractice, onNext, onClose }: SummaryScreenProps) {
+export function SummaryScreen({ draft, onEdit, onEditGoodPractice, highlight, onNext, onClose }: SummaryScreenProps) {
   const ids = { nee: useId(), all: useId(), why: useId() };
   const total = counts(draft);
   const incomplete = incompleteQuestions(draft);
   const neeQuestions = QUESTIONS.filter((q) => draft.answers[q.id] === 'nee');
+  // The highlight sits on the Nee card when there is one, else on the section row.
+  const highlightOnCard = highlight !== undefined && draft.answers[highlight] === 'nee';
+  const marked = useRef<HTMLElement>(null);
+  useEffect(() => marked.current?.scrollIntoView?.({ block: 'center' }), []);
 
   return (
     <>
@@ -74,7 +80,16 @@ export function SummaryScreen({ draft, onEdit, onEditGoodPractice, onNext, onClo
             <SectionTitle id={ids.nee}>Niet in orde</SectionTitle>
             <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
               {neeQuestions.map((q) => (
-                <NeeCard key={q.id} draft={draft} id={q.id} text={q.appText} incomplete={incomplete.has(q.id)} onEdit={onEdit} />
+                <NeeCard
+                  key={q.id}
+                  draft={draft}
+                  id={q.id}
+                  text={q.appText}
+                  incomplete={incomplete.has(q.id)}
+                  highlighted={highlightOnCard && q.id === highlight}
+                  markRef={marked}
+                  onEdit={onEdit}
+                />
               ))}
             </ul>
           </section>
@@ -86,18 +101,25 @@ export function SummaryScreen({ draft, onEdit, onEditGoodPractice, onNext, onClo
             {SECTIONS.map((s) => {
               const questions = QUESTIONS.filter((q) => q.section === s.nr);
               const open = questions.find((q) => incomplete.has(q.id));
+              const flagged = !highlightOnCard ? questions.find((q) => q.id === highlight) : undefined;
               return (
                 <li key={s.nr}>
-                  {/* An incomplete section opens at the question that needs work. */}
-                  <Row title={`${s.nr} ${s.title}`} onClick={() => onEdit((open ?? questions[0]!).id)}>
+                  {/* An incomplete or highlighted section opens at the question that needs work. */}
+                  <Row
+                    title={`${s.nr} ${s.title}`}
+                    highlighted={flagged !== undefined}
+                    markRef={marked}
+                    onClick={() => onEdit((open ?? flagged ?? questions[0]!).id)}
+                  >
                     {sectionCounts(draft, s)}
                     {open && <NotComplete />}
+                    {flagged && <LookAgain />}
                   </Row>
                 </li>
               );
             })}
             <li>
-              <Row title="Wat gaat hier goed?" onClick={onEditGoodPractice}>
+              <Row title="Wat gaat hier goed?" highlighted={false} onClick={onEditGoodPractice}>
                 <span className="line-clamp-2">{draft.goodPractice.trim() || 'Niet ingevuld'}</span>
               </Row>
             </li>
@@ -138,10 +160,12 @@ interface NeeCardProps {
   id: QuestionId;
   text: string;
   incomplete: boolean;
+  highlighted: boolean;
+  markRef: Ref<HTMLElement>;
   onEdit: (id: QuestionId) => void;
 }
 
-function NeeCard({ draft, id, text, incomplete, onEdit }: NeeCardProps) {
+function NeeCard({ draft, id, text, incomplete, highlighted, markRef, onEdit }: NeeCardProps) {
   const titleId = useId();
   const details = draft.nee[id];
   const comment = details?.comment.trim() ?? '';
@@ -153,12 +177,19 @@ function NeeCard({ draft, id, text, incomplete, onEdit }: NeeCardProps) {
     .join(', ');
 
   return (
-    <li className="rounded-chunky border-2 border-b-5 border-coral bg-roze px-3.5 py-3">
+    <li
+      ref={highlighted ? (markRef as Ref<HTMLLIElement>) : undefined}
+      className={cn(
+        'rounded-chunky border-2 border-b-5 border-coral bg-roze px-3.5 py-3',
+        highlighted && 'outline-solid outline-3 outline-offset-2 outline-coral-d',
+      )}
+    >
       <p id={titleId} className="m-0 text-[17px] font-black leading-[1.25]">
         {`${id} ${text}`}
       </p>
       {comment && <p className="mt-1 mb-0 text-[15px] break-words">{comment}</p>}
       {incomplete && <NotComplete />}
+      {highlighted && <LookAgain />}
       <div className="mt-2 flex items-center justify-between gap-3 text-[14px] font-extrabold text-coral-d">
         <span>{meta}</span>
         <button
@@ -191,13 +222,36 @@ function NotComplete() {
   );
 }
 
-function Row({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) {
+/** Where the server found a problem. Icon plus text, like NotComplete. */
+function LookAgain() {
+  return (
+    <span className="mt-1.5 flex items-center gap-1.5 text-[15px] font-extrabold text-coral-d">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
+      Kijk hier nog eens naar.
+    </span>
+  );
+}
+
+interface RowProps {
+  title: string;
+  highlighted: boolean;
+  markRef?: Ref<HTMLElement>;
+  onClick: () => void;
+  children: ReactNode;
+}
+
+function Row({ title, highlighted, markRef, onClick, children }: RowProps) {
   return (
     <button
       type="button"
+      ref={highlighted ? (markRef as Ref<HTMLButtonElement>) : undefined}
       onClick={onClick}
       className={cn(
-        'flex w-full items-center justify-between gap-3 rounded-chunky border-2 border-b-5 border-grey bg-white px-3.5 py-3 text-left',
+        'flex w-full items-center justify-between gap-3 rounded-chunky border-2 border-b-5 bg-white px-3.5 py-3 text-left',
+        highlighted ? 'border-coral' : 'border-grey',
         'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet',
         'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-transform',
       )}

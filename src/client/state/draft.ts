@@ -172,6 +172,37 @@ export function toSubmission(d: Draft): Submission {
   };
 }
 
+/**
+ * Turns a signed submission back into a draft, for fixing it after the server refused it.
+ * The signature and the declaration are cleared, so the technician signs again after the fix.
+ */
+export function draftFromSubmission(s: Submission): Draft {
+  const answers: Draft['answers'] = {};
+  const nee: Draft['nee'] = {};
+  for (const id of QUESTION_IDS) {
+    const a = s.answers[id];
+    answers[id] = a.answer;
+    if (a.answer === 'nee') {
+      nee[id] = { comment: a.comment, actionBefore: a.actionBefore, photos: [...a.photos] };
+    }
+  }
+  return {
+    id: s.submissionId,
+    monteur: s.monteur,
+    project: s.project,
+    projectnummer: s.projectnummer,
+    startedAt: s.startedAt,
+    // Now, not the inspection date: the 14-day purge counts from the last change.
+    updatedAt: toIsoWithOffset(new Date()),
+    answers,
+    nee,
+    goodPractice: s.goodPractice,
+    signedAt: s.signedAt,
+    declaration: false,
+    website: s.website ?? '',
+  };
+}
+
 export function nextUnanswered(d: Draft): QuestionId | null {
   return QUESTION_IDS.find((id) => !d.answers[id]) ?? null;
 }

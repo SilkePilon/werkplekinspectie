@@ -4,6 +4,7 @@ import { submissionSchema } from '@shared/schema';
 import {
   IncompleteDraftError,
   counts,
+  draftFromSubmission,
   draftReducer,
   missingFields,
   newDraft,
@@ -241,6 +242,61 @@ describe('toSubmission', () => {
       'answers.5A.comment',
       'answers.5A.actionBefore',
     ]);
+  });
+});
+
+describe('draftFromSubmission', () => {
+  test('rebuilds the draft, keeps every answer, and asks for a new signature', () => {
+    vi.useFakeTimers({ now: new Date('2026-12-03T10:00:00Z') });
+    const d = apply(
+      complete(),
+      { type: 'answer', id: '2C', value: 'nvt' },
+      { type: 'answer', id: '4B', value: 'nee' },
+      { type: 'neeDetails', id: '4B', details: { comment: 'Sticker verlopen', actionBefore: '2026-11-25', photos: [PHOTO] } },
+      { type: 'goodPractice', text: 'Opgeruimde werkplek' },
+      { type: 'honeypot', value: 'x' },
+    );
+    const s = toSubmission(d);
+    const back = draftFromSubmission(s);
+
+    expect(back).toMatchObject({
+      id: d.id,
+      monteur: d.monteur,
+      project: d.project,
+      projectnummer: d.projectnummer,
+      startedAt: d.startedAt,
+      goodPractice: 'Opgeruimde werkplek',
+      website: 'x',
+      signedAt: '2026-11-20T09:40:00+01:00',
+      declaration: false,
+    });
+    expect(back.signature).toBeUndefined();
+    expect(back.answers).toEqual(d.answers);
+    expect(back.nee).toEqual({ '4B': { comment: 'Sticker verlopen', actionBefore: '2026-11-25', photos: [PHOTO] } });
+    // Fresh `updatedAt`, so the 14-day purge counts from now and not from the inspection date.
+    expect(back.updatedAt).toBe(toIsoWithOffset(new Date('2026-12-03T10:00:00Z')));
+    // Only the new signature and the declaration are missing; signing again makes it sendable.
+    expect(missingFields(back)).toEqual(['signature', 'declaration']);
+    expect(toSubmission(signed(back))).toEqual(s);
+  });
+
+  test('the draft does not share photo arrays with the submission', () => {
+    const s = toSubmission(
+      apply(
+        complete(),
+        { type: 'answer', id: '1A', value: 'nee' },
+        { type: 'neeDetails', id: '1A', details: { comment: 'x', actionBefore: '2026-11-21', photos: [PHOTO] } },
+      ),
+    );
+    const back = draftFromSubmission(s);
+    back.nee['1A']!.photos.push(PHOTO);
+    expect(s.answers['1A']).toMatchObject({ photos: [PHOTO] });
+  });
+
+  test('a submission without the honeypot key gives an empty honeypot', () => {
+    const s = toSubmission(complete());
+    delete s.website;
+    expect(draftFromSubmission(s).website).toBe('');
   });
 });
 

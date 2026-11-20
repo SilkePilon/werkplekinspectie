@@ -4,9 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { clear, createStore } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
+import type { Submission } from '@shared/schema';
 import { App, type Screen } from '../../src/client/App';
 import { newDraft, type AnswerValue, type Draft, type NeeDetails } from '../../src/client/state/draft';
-import { loadDraft, saveDraft } from '../../src/client/storage/db';
+import { listOutbox, loadDraft, saveDraft } from '../../src/client/storage/db';
 
 // jsdom has no canvas: a stand-in signature pad the tests can steer.
 const pad = vi.hoisted(() => ({
@@ -128,6 +129,16 @@ const nee4B = (over: Partial<NeeDetails> = {}): NeeDetails => ({
 
 function summaryButton() {
   return button('Alles klopt, naar tekenen');
+}
+
+/** The signed inspection, once sending has put it in the outbox. */
+async function queued(): Promise<Submission> {
+  let out: Submission[] = [];
+  await waitFor(async () => {
+    out = await listOutbox();
+    expect(out).toHaveLength(1);
+  });
+  return out[0]!;
 }
 
 async function saved(): Promise<Draft> {
@@ -263,6 +274,23 @@ describe('summary', () => {
     expect(button(/^9 EHBO/).textContent).toContain('Nog niet compleet');
   });
 
+  test('tapping "9 EHBO" with 9B unanswered opens 9B and comes back to the summary', async () => {
+    const user = setup();
+    const answers = allJa();
+    delete answers['9B'];
+    await seed(answers);
+    await openAt({ name: 'summary' });
+    await user.click(button(/^9 EHBO/));
+    expect(screen.getByText('Is er iemand met een EHBO-diploma?')).toBeTruthy();
+    expect(history.state).toEqual({ screen: { name: 'question', id: '9B', returnTo: 'summary' } });
+
+    await tick(300);
+    await user.click(screen.getByText('Ja'));
+    await tick(300);
+    expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
+    expect(summaryButton().disabled).toBe(false);
+  });
+
   test('"Alles klopt, naar tekenen" opens the signature screen', async () => {
     const user = setup();
     await seed(allJa());
@@ -305,10 +333,10 @@ describe('signature', () => {
 
     await user.click(send);
     expect(pad.toDataURL).toEqual(['image/png']);
-    const d = await saved();
-    expect(d.signature).toBe(SIGNATURE);
-    expect(d.signedAt).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/);
-    expect(d.declaration).toBe(true);
+    const s = await queued();
+    expect(s.signature).toBe(SIGNATURE);
+    expect(s.signedAt).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/);
+    expect(s.declaration).toBe(true);
   });
 
   test('the pen suits a finger and uses the ink colour', async () => {
@@ -360,7 +388,7 @@ describe('signature', () => {
     await user.click(button('Verstuur inspectie'));
     expect(sizes).toEqual([900, 300]);
     expect(canvas.width).toBe(900);
-    expect((await saved()).signature).toBe(SIGNATURE);
+    expect((await queued()).signature).toBe(SIGNATURE);
   });
 
   test('a signature that stays too large shows an error and is not saved', async () => {
