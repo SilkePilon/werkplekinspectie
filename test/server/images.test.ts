@@ -1,6 +1,15 @@
+import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { InvalidImageError, checkPngPixels, decodeDataUrl, imageSize } from '../../src/server/images.js';
-import { makePng, pngChunk } from '../fixtures/png.js';
+import {
+  InvalidImageError,
+  checkPng,
+  checkPngPixels,
+  checkPngStructure,
+  decodeDataUrl,
+  imageSize,
+} from '../../src/server/images.js';
+import { makePng, pngChunk, pngHiddenInLongIhdr, pngHiddenInTrns, pngSecondIhdr } from '../fixtures/png.js';
 
 // 1×1 pixels in brand violet, generated with ImageMagick (`convert -size 1x1 xc:'#431961' -strip`).
 const PNG_1X1 =
@@ -160,72 +169,145 @@ describe('imageSize', () => {
   });
 });
 
-describe('checkPngPixels', () => {
+const MAX = { width: 2400, height: 1600 };
+const BOMB_BYTES = 64 * 1024 * 1024;
+
+/** Runs `fn`, which must throw InvalidImageError, and checks it allocated far less than the bomb. */
+function refusesCheaply(fn: () => void) {
+  const before = process.memoryUsage().rss;
+  expect(fn).toThrow(InvalidImageError);
+  expect(process.memoryUsage().rss - before).toBeLessThan(32 * 1024 * 1024);
+}
+
+const HOSTILE = [
+  ['the plain bomb: 10x10 RGBA whose pixel data inflates to 64 MB', () => makePng({ width: 10, height: 10, rawBytes: BOMB_BYTES })],
+  ['a second IHDR declaring 12000x12000', () => pngSecondIhdr(12000)],
+  ['an IDAT bomb hidden inside a tRNS chunk of an RGBA PNG', () => pngHiddenInTrns(BOMB_BYTES)],
+  ['an IDAT bomb hidden inside an IHDR longer than 13 bytes', () => pngHiddenInLongIhdr(BOMB_BYTES)],
+] as const;
+
+describe('checkPng', () => {
   test('accepts the real 1x1 palette PNG fixture', () => {
-    expect(() => checkPngPixels(Buffer.from(PNG_1X1, 'base64'))).not.toThrow();
+    expect(() => checkPng(Buffer.from(PNG_1X1, 'base64'), MAX)).not.toThrow();
   });
 
   test.each([
     ['RGBA 8-bit, as a canvas exports it', { width: 600, height: 200 }],
+    ['RGBA 8-bit at the 2400x1600 maximum', { width: 2400, height: 1600 }],
     ['grey 1-bit with a width that is not a multiple of 8', { width: 13, height: 7, colorType: 0, bitDepth: 1 }],
-    ['RGB 16-bit', { width: 10, height: 10, colorType: 2, bitDepth: 16 }],
     ['palette 4-bit', { width: 9, height: 3, colorType: 3, bitDepth: 4 }],
     ['grey+alpha 8-bit', { width: 5, height: 5, colorType: 4 }],
     ['pixel data over several IDAT chunks', { width: 300, height: 300, idatChunks: 4 }],
   ])('accepts a PNG with %s', (_name, opts) => {
-    expect(() => checkPngPixels(makePng(opts))).not.toThrow();
+    expect(() => checkPng(makePng(opts), MAX)).not.toThrow();
   });
 
-  test('refuses a decompression bomb: a 10x10 RGBA PNG whose pixel data inflates to 64 MB', () => {
-    const bomb = makePng({ width: 10, height: 10, rawBytes: 64 * 1024 * 1024 });
-    expect(bomb.length).toBeLessThan(300_000);
-    const before = process.memoryUsage().rss;
-    expect(() => checkPngPixels(bomb)).toThrow(InvalidImageError);
-    // Inflating stops at the 410 bytes the header allows; nothing near 64 MB is allocated.
-    expect(process.memoryUsage().rss - before).toBeLessThan(32 * 1024 * 1024);
+  test.each(HOSTILE)('refuses %s, without inflating it', (_name, build) => {
+    const png = build();
+    expect(png.length).toBeLessThan(300_000);
+    refusesCheaply(() => checkPng(png, MAX));
+  });
+
+  test('refuses a size over the maximum, also when only png-js would see it', () => {
+    expect(() => checkPng(makePng({ width: 2401, height: 10 }), MAX)).toThrow(InvalidImageError);
+    expect(() => checkPng(makePng({ width: 10, height: 1601 }), MAX)).toThrow(InvalidImageError);
   });
 
   test('refuses pixel data that inflates to one byte more than the size allows', () => {
-    expect(() => checkPngPixels(makePng({ width: 10, height: 10, rawBytes: 411 }))).toThrow(InvalidImageError);
+    expect(() => checkPng(makePng({ width: 10, height: 10, rawBytes: 411 }), MAX)).toThrow(InvalidImageError);
   });
 
   test('refuses pixel data that is shorter than the size needs', () => {
-    expect(() => checkPngPixels(makePng({ width: 10, height: 10, rawBytes: 409 }))).toThrow(InvalidImageError);
+    expect(() => checkPng(makePng({ width: 10, height: 10, rawBytes: 409 }), MAX)).toThrow(InvalidImageError);
   });
 
   test('refuses an interlaced PNG', () => {
-    expect(() => checkPngPixels(makePng({ width: 10, height: 10, interlace: 1 }))).toThrow(InvalidImageError);
+    expect(() => checkPng(makePng({ width: 10, height: 10, interlace: 1 }), MAX)).toThrow(InvalidImageError);
   });
 
   test.each([
     ['an unknown colour type', { width: 4, height: 4, colorType: 5, rawBytes: 20 }],
     ['a bit depth RGBA does not allow', { width: 4, height: 4, colorType: 6, bitDepth: 4 }],
+    ['16 bits per channel (a canvas exports 8)', { width: 10, height: 10, colorType: 6, bitDepth: 16 }],
     ['no IEND chunk', { width: 4, height: 4, noEnd: true }],
   ])('refuses a PNG with %s', (_name, opts) => {
-    expect(() => checkPngPixels(makePng(opts))).toThrow(InvalidImageError);
+    expect(() => checkPng(makePng(opts), MAX)).toThrow(InvalidImageError);
   });
 
   test('refuses a PNG without any IDAT chunk', () => {
     const png = makePng({ width: 4, height: 4 });
-    const ihdrEnd = 8 + 25;
-    const noIdat = Buffer.concat([png.subarray(0, ihdrEnd), pngChunk('IEND')]);
-    expect(() => checkPngPixels(noIdat)).toThrow(InvalidImageError);
+    const noIdat = Buffer.concat([png.subarray(0, 8 + 25), pngChunk('IEND')]);
+    expect(() => checkPng(noIdat, MAX)).toThrow(InvalidImageError);
   });
 
   test('refuses a PNG whose chunk length runs past the end of the file', () => {
     const png = makePng({ width: 4, height: 4 });
     png.writeUInt32BE(0x7fffffff, 8 + 25);
-    expect(() => checkPngPixels(png)).toThrow(InvalidImageError);
+    expect(() => checkPng(png, MAX)).toThrow(InvalidImageError);
   });
 
   test('refuses pixel data that is not a zlib stream', () => {
     const png = makePng({ width: 4, height: 4 });
-    const idatData = 8 + 25 + 8;
-    png.fill(0xaa, idatData, idatData + 4);
-    expect(() => checkPngPixels(png)).toThrow(InvalidImageError);
+    png.fill(0xaa, 8 + 25 + 8, 8 + 25 + 12);
+    expect(() => checkPng(png, MAX)).toThrow(InvalidImageError);
   });
 
   test('refuses a header-only PNG', () => {
-    expect(() => checkPngPixels(pngHeader(10, 10))).toThrow(InvalidImageError);
+    expect(() => checkPng(pngHeader(10, 10), MAX)).toThrow(InvalidImageError);
   });
+});
+
+// Each layer on its own refuses every hostile shape: the structure check (defence in depth)
+// and the check on what png-js itself parsed (what pdfkit will draw).
+describe('checkPngStructure', () => {
+  test.each(HOSTILE.slice(1))('refuses %s', (_name, build) => {
+    expect(() => checkPngStructure(build())).toThrow(InvalidImageError);
+  });
+
+  test.each([
+    ['tRNS on grey+alpha', () => Buffer.concat([pngHead(4, 4, 4), pngChunk('tRNS', Buffer.alloc(2)), ...pngTail(4, 4, 4)])],
+    ['a chunk before IHDR', () => Buffer.concat([PNG_SIGNATURE, pngChunk('tEXt', Buffer.from('a\0b')), pngHead(4, 4).subarray(8), ...pngTail(4, 4)])],
+  ])('refuses %s', (_name, build) => {
+    expect(() => checkPngStructure(build())).toThrow(InvalidImageError);
+  });
+
+  test('allows tRNS where the spec allows it (palette)', () => {
+    const png = Buffer.concat([pngHead(4, 4, 3, 8), pngChunk('PLTE', Buffer.alloc(3)), pngChunk('tRNS', Buffer.from([0])), ...pngTail(4, 4, 3, 8)]);
+    expect(() => checkPngStructure(png)).not.toThrow();
+    expect(() => checkPng(png, MAX)).not.toThrow();
+  });
+
+  test('accepts a canvas-like PNG', () => {
+    expect(() => checkPngStructure(makePng({ width: 600, height: 200, idatChunks: 3 }))).not.toThrow();
+  });
+});
+
+describe('checkPngPixels (on what png-js parsed)', () => {
+  test.each(HOSTILE)('refuses %s', (_name, build) => {
+    refusesCheaply(() => checkPngPixels(build(), MAX));
+  });
+
+  test('accepts a canvas-like PNG', () => {
+    expect(() => checkPngPixels(makePng({ width: 2400, height: 1600, idatChunks: 5 }), MAX)).not.toThrow();
+  });
+});
+
+/** Signature plus IHDR, as makePng writes them. */
+function pngHead(width: number, height: number, colorType = 6, bitDepth = 8): Buffer {
+  const png = makePng({ width, height, colorType, bitDepth });
+  return png.subarray(0, 8 + 25);
+}
+
+/** IDAT and IEND, as makePng writes them. */
+function pngTail(width: number, height: number, colorType = 6, bitDepth = 8): Buffer[] {
+  const png = makePng({ width, height, colorType, bitDepth });
+  const idat = png.indexOf('IDAT', 0, 'latin1') - 4;
+  return [png.subarray(idat)];
+}
+
+test('images.ts and pdfkit load the same png-js package', () => {
+  const fromImages = createRequire(new URL('../../src/server/images.ts', import.meta.url)).resolve('png-js');
+  const pdfkit = createRequire(import.meta.url).resolve('pdfkit');
+  const fromPdfkit = createRequire(pdfkit).resolve('png-js');
+  expect(dirname(fromImages)).toBe(dirname(fromPdfkit));
 });

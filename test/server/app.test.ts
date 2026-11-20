@@ -8,9 +8,9 @@ import { buildApp, type AppDeps } from '../../src/server/app.js';
 import { loadConfig } from '../../src/server/config.js';
 import type { MailMessage } from '../../src/server/mail/build.js';
 import type { Mailer } from '../../src/server/mail/send.js';
-import type { renderInspectionPdf } from '../../src/server/pdf/render.js';
+import { renderInspectionPdf as renderInspectionPdfReal, type renderInspectionPdf } from '../../src/server/pdf/render.js';
 import type { Answer, Submission } from '../../src/shared/schema.js';
-import { makePng, pngDataUrl } from '../fixtures/png.js';
+import { makePng, pngDataUrl, pngHiddenInLongIhdr, pngHiddenInTrns, pngSecondIhdr } from '../fixtures/png.js';
 import { JPEG_DATA_URL, PNG_DATA_URL, makeSubmission } from '../fixtures/submission.js';
 
 const cfg = loadConfig({
@@ -338,6 +338,30 @@ describe('POST /api/inspecties', () => {
     expect(res.json()).toEqual({ status: 'ongeldig', fields: ['signature'] });
     expect(renderPdf).not.toHaveBeenCalled();
     expect(mailer.sent).toHaveLength(0);
+  });
+
+  // Shapes a check that parses chunks differently from png-js (used by pdfkit) would let through.
+  test.each([
+    ['a second IHDR declaring 12000x12000', () => pngSecondIhdr(12000)],
+    ['an IDAT bomb hidden in a tRNS chunk', () => pngHiddenInTrns(64 * 1024 * 1024)],
+    ['an IDAT bomb hidden in an over-long IHDR', () => pngHiddenInLongIhdr(64 * 1024 * 1024)],
+  ])('a signature with %s is refused before the PDF', async (_name, build) => {
+    const { app, mailer, renderPdf } = await setup();
+    const png = build();
+    expect(png.length).toBeLessThan(300_000);
+    const res = await post(app, makeSubmission({ signature: pngDataUrl(png) }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['signature'] });
+    expect(renderPdf).not.toHaveBeenCalled();
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('a 2400x1600 RGBA signature in several IDAT chunks is accepted and rendered by the real renderer', async () => {
+    const { app, mailer } = await setup({ renderPdf: renderInspectionPdfReal });
+    const signature = pngDataUrl(makePng({ width: 2400, height: 1600, idatChunks: 6 }));
+    const res = await post(app, makeSubmission({ signature }));
+    expect(res.statusCode).toBe(200);
+    expect(mailer.sent[0]!.attachments[0]!.content.subarray(0, 5).toString()).toBe('%PDF-');
   });
 
   test('an interlaced signature PNG is refused', async () => {

@@ -7,13 +7,14 @@ import rateLimit, { normalizeIP } from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify, {
   type FastifyInstance,
+  type FastifyReply,
   type FastifyRequest,
   type FastifyServerOptions,
   type preParsingHookHandler,
 } from 'fastify';
 import type { z } from 'zod';
 import type { Config } from './config.js';
-import { InvalidImageError, checkPngPixels, decodeDataUrl, imageSize } from './images.js';
+import { InvalidImageError, checkPng, decodeDataUrl, imageSize } from './images.js';
 import { buildMail } from './mail/build.js';
 import type { Mailer } from './mail/send.js';
 import { renderInspectionPdf } from './pdf/render.js';
@@ -74,6 +75,18 @@ const CLIENT_ERRORS: Partial<Record<number, { status: string }>> = {
 const tooMany = () => Object.assign(new Error('te_veel'), { statusCode: 429 });
 
 class MailFailedError extends Error {}
+
+/** A taken submit slot. `leave` is idempotent, so it is freed exactly once. */
+interface SubmitSlot {
+  leave: () => void;
+  /** The response closed: sent, or the client went away. */
+  closed: boolean;
+  /** The handler runs and frees the slot when it is done. */
+  working: boolean;
+}
+
+/** nginx's "client closed request": nobody is left to answer, so nothing is processed. */
+const CLIENT_GONE = 499;
 
 /** Logs only method, path, status, duration, byte sizes and the request id. */
 function loggerOptions(stream: Writable): FastifyServerOptions['logger'] {
@@ -153,10 +166,14 @@ function imageFits(check: ImageCheck): boolean {
   try {
     const { kind, data } = decodeDataUrl(check.url);
     if (data.length > check.maxBytes) return false;
+    const max = { width: check.maxWidth, height: check.maxHeight };
+    // For a PNG the size comes from png-js itself, the parser pdfkit uses.
+    if (kind === 'png') {
+      checkPng(data, max);
+      return true;
+    }
     const { width, height } = imageSize(data, kind);
-    if (width > check.maxWidth || height > check.maxHeight) return false;
-    if (kind === 'png') checkPngPixels(data);
-    return true;
+    return width <= max.width && height <= max.height;
   } catch (err) {
     if (err instanceof InvalidImageError) return false;
     throw err;
@@ -171,6 +188,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
   // Sends that are still running, so a double tap waits for the first instead of mailing twice.
   const inFlight = new Map<string, Promise<void>>();
   const submitGate = createConcurrencyGate(MAX_CONCURRENT_SUBMITS);
+  const slots = new WeakMap<FastifyRequest, SubmitSlot>();
 
   const app = Fastify({
     logger: deps.logStream ? loggerOptions(deps.logStream) : false,
@@ -201,14 +219,21 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
   await app.register(rateLimit, { global: false });
 
   // Before the body is read, and before the global limit so a busy refusal costs no budget.
-  // The slot is freed when the response is closed: sent, failed, or the client went away.
-  const takeSubmitSlot: preParsingHookHandler = async (_req, reply, payload) => {
+  // A request that never reaches the handler (refused, or the client went away) frees its
+  // slot when the response closes. Once the handler runs, it frees the slot itself when its
+  // work is done, even if the client has gone: the memory is in use until then.
+  const takeSubmitSlot: preParsingHookHandler = async (req, reply, payload) => {
     const leave = submitGate.enter();
     if (leave === undefined) {
       reply.header('retry-after', BUSY_RETRY_AFTER_S);
       throw tooMany();
     }
-    reply.raw.once('close', leave);
+    const slot: SubmitSlot = { leave, closed: false, working: false };
+    slots.set(req, slot);
+    reply.raw.once('close', () => {
+      slot.closed = true;
+      if (!slot.working) leave();
+    });
     return payload;
   };
 
@@ -253,6 +278,18 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
   };
 
   app.post('/api/inspecties', submitOptions, async (req, reply) => {
+    const slot = slots.get(req);
+    // Gone before the work started: its slot is already free, so do not use memory uncapped.
+    if (slot?.closed) return reply.code(CLIENT_GONE).send({ status: 'onbekend' });
+    if (slot) slot.working = true;
+    try {
+      return await handleSubmit(req, reply);
+    } finally {
+      slot?.leave();
+    }
+  });
+
+  async function handleSubmit(req: FastifyRequest, reply: FastifyReply) {
     const parsed = submissionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send(invalid(issueFields(parsed.error)));
     const sub = parsed.data;
@@ -278,7 +315,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
       return reply.code(502).send({ status: 'mail_mislukt' });
     }
     return SENT;
-  });
+  }
 
   app.get('/healthz', { logLevel: 'warn' }, async (_req, reply) => reply.type('text/plain').send('ok'));
 

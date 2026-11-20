@@ -358,6 +358,56 @@ describe('concurrent submissions', () => {
     expect((await post(app, { cf: '198.51.100.30' })).statusCode).toBe(200);
   });
 
+  test('a client that disconnects while its submission is processed keeps the slot until the work is done', async () => {
+    const held = heldRenderer();
+    const { app } = await setup({}, { renderPdf: held.renderPdf });
+    const raws: Array<{ emit(event: string): boolean }> = [];
+    app.addHook('preHandler', async (_req, reply) => {
+      raws.push(reply.raw);
+    });
+    // The test client reports a closed response as an error: that is the disconnect.
+    const running = [post(app, { cf: '198.51.100.1' }).catch((err: unknown) => err), post(app, { cf: '198.51.100.2' })];
+    await vi.waitFor(() => expect(held.renderPdf).toHaveBeenCalledTimes(2));
+
+    // The first client goes away; its PDF is still being made.
+    raws[0]!.emit('close');
+    expect((await post(app, { cf: '198.51.100.3' })).statusCode).toBe(429);
+
+    held.release();
+    await Promise.all(running);
+    expect((await post(app, { cf: '198.51.100.4' })).statusCode).toBe(200);
+  });
+
+  test('a client gone before its submission is handled frees the slot and is not processed', async () => {
+    const { app, renderPdf, mailer } = await setup();
+    app.addHook('preHandler', async (req, reply) => {
+      if (req.headers['x-test-gone'] === '1') reply.raw.emit('close');
+    });
+    // The test client reports the closed response as an error: nobody hears the answer.
+    const gone = await post(app, { cf: '198.51.100.1', headers: { 'x-test-gone': '1' } }).catch((err: unknown) => err);
+    expect(gone).toBeInstanceOf(Error);
+    expect(renderPdf).not.toHaveBeenCalled();
+    expect(mailer.sent).toHaveLength(0);
+    // Its slot is free again: two more fit at once.
+    const two = await Promise.all([post(app, { cf: '198.51.100.2' }), post(app, { cf: '198.51.100.3' })]);
+    expect(two.map((r) => r.statusCode)).toEqual([200, 200]);
+  });
+
+  test('a slot is freed exactly once: after many finished requests the cap is still 2', async () => {
+    const held = heldRenderer();
+    const { app } = await setup({}, { renderPdf: held.renderPdf });
+    held.release();
+    for (let i = 0; i < 4; i++) expect((await post(app, { cf: `198.51.100.${40 + i}` })).statusCode).toBe(200);
+
+    const again = heldRenderer();
+    held.renderPdf.mockImplementation(again.renderPdf);
+    const running = [post(app, { cf: '198.51.100.50' }), post(app, { cf: '198.51.100.51' })];
+    await vi.waitFor(() => expect(again.renderPdf).toHaveBeenCalledTimes(2));
+    expect((await post(app, { cf: '198.51.100.52' })).statusCode).toBe(429);
+    again.release();
+    await Promise.all(running);
+  });
+
   test('GET routes are not limited by the submit cap', async () => {
     const held = heldRenderer();
     const { app } = await setup({}, { renderPdf: held.renderPdf });

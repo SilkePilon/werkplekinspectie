@@ -1,8 +1,11 @@
 // Turns the photo and signature data URLs from a submission into raw bytes, checks
 // that the bytes really are a JPEG or PNG, and reads the pixel size from the header
-// so oversized images are refused before they reach the PDF. For PNG the pixel data
-// is also inflated, with a hard cap, because pdfkit inflates it without any limit.
+// so oversized images are refused before they reach the PDF. A PNG is parsed with png-js
+// (as pdfkit does) and its pixel data inflated with a hard cap, because pdfkit inflates it
+// without any limit.
 import { inflateSync } from 'node:zlib';
+// The same module pdfkit imports, so the checks see the file exactly as pdfkit will.
+import PNG from 'png-js';
 
 export type ImageKind = 'jpeg' | 'png';
 
@@ -113,60 +116,99 @@ export function imageSize(data: Buffer, kind: ImageKind): ImageSize {
   return size;
 }
 
-/** Channels per pixel and the bit depths the PNG spec allows, per colour type. */
-const PNG_COLOR_TYPES: Partial<Record<number, { channels: number; depths: number[] }>> = {
-  0: { channels: 1, depths: [1, 2, 4, 8, 16] },
-  2: { channels: 3, depths: [8, 16] },
-  3: { channels: 1, depths: [1, 2, 4, 8] },
-  4: { channels: 2, depths: [8, 16] },
-  6: { channels: 4, depths: [8, 16] },
+/** Bit depths the PNG spec allows per colour type, limited to 8 bits: a canvas exports 8. */
+const PNG_DEPTHS: Partial<Record<number, number[]>> = {
+  0: [1, 2, 4, 8],
+  2: [8],
+  3: [1, 2, 4, 8],
+  4: [8],
+  6: [8],
 };
+/** Colour types that may carry a tRNS chunk; png-js mis-parses it on the others. */
+const TRNS_TYPES = new Set([0, 2, 3]);
+const IHDR_LENGTH = 13;
+/** The PNG spec's maximum chunk length. */
+const MAX_CHUNK = 2 ** 31 - 1;
 
-/** All IDAT data, in order, up to IEND. Undefined if a chunk runs past the end or IEND is missing. */
-function pngImageData(data: Buffer): Buffer | undefined {
-  const idat: Buffer[] = [];
+const bad = (message: string) => new InvalidImageError(message);
+
+/**
+ * Strict chunk structure, so no PNG parser can read the file in two ways: IHDR first, exactly
+ * 13 bytes and only once; every chunk inside the file; tRNS only where the spec allows it and
+ * at most once; at least one IDAT; IEND present. Defence in depth for checkPngPixels.
+ */
+export function checkPngStructure(data: Buffer): void {
+  if (sniffImage(data) !== 'png') throw bad('Geen PNG');
   let pos = 8;
+  let colorType: number | undefined;
+  let idat = 0;
+  let trns = 0;
   while (pos + 12 <= data.length) {
     const length = data.readUInt32BE(pos);
     const type = data.toString('latin1', pos + 4, pos + 8);
-    const end = pos + 8 + length;
-    if (end + 4 > data.length) return undefined;
-    if (type === 'IDAT') idat.push(data.subarray(pos + 8, end));
-    if (type === 'IEND') return Buffer.concat(idat);
-    pos = end + 4;
+    const body = pos + 8;
+    if (length > MAX_CHUNK || body + length + 4 > data.length) throw bad('PNG-chunk loopt voorbij het einde');
+    if (colorType === undefined && type !== 'IHDR') throw bad('PNG begint niet met IHDR');
+    switch (type) {
+      case 'IHDR':
+        if (colorType !== undefined) throw bad('PNG met meer dan één IHDR');
+        if (length !== IHDR_LENGTH) throw bad('PNG-IHDR heeft de verkeerde lengte');
+        colorType = data.readUInt8(body + 9);
+        break;
+      case 'tRNS':
+        trns += 1;
+        if (!TRNS_TYPES.has(colorType!) || trns > 1) throw bad('PNG-tRNS niet toegestaan');
+        break;
+      case 'IDAT':
+        idat += 1;
+        break;
+      case 'IEND':
+        if (idat === 0) throw bad('PNG zonder pixeldata');
+        return;
+    }
+    pos = body + length + 4;
   }
-  return undefined;
+  throw bad('PNG zonder IEND');
 }
 
 /**
- * Inflates the PNG pixel data with a cap of exactly what the header's size needs, and
- * refuses the image unless it inflates to exactly that. Interlaced PNGs are refused.
- * This stops decompression bombs: a tiny file whose pixel data inflates to gigabytes.
- * Throws InvalidImageError.
+ * Parses the PNG with png-js, the parser pdfkit uses, and checks what *it* found: the size
+ * against `max`, no interlacing, 8 bits or less, and pixel data that inflates to exactly
+ * what that size needs. Inflating stops at that length, so a decompression bomb (a tiny
+ * file whose pixel data inflates to gigabytes) costs no memory. Throws InvalidImageError.
  */
-export function checkPngPixels(data: Buffer): void {
-  const { width, height } = imageSize(data, 'png');
-  if (data.length < 33) throw new InvalidImageError('PNG-header te kort');
-  const bitDepth = data.readUInt8(24);
-  const format = PNG_COLOR_TYPES[data.readUInt8(25)];
-  if (format === undefined || !format.depths.includes(bitDepth)) {
-    throw new InvalidImageError('Onbekend PNG-kleurtype');
+export function checkPngPixels(data: Buffer, max: ImageSize): void {
+  let png: PNG;
+  try {
+    png = new PNG(data);
+  } catch {
+    throw bad('PNG niet leesbaar');
   }
-  // Compression and filter method must be 0; interlacing is not accepted.
-  if (data.readUInt8(26) !== 0 || data.readUInt8(27) !== 0 || data.readUInt8(28) !== 0) {
-    throw new InvalidImageError('PNG-indeling niet ondersteund');
+  const { width, height, bits, colorType } = png;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+    throw bad('Afmetingen van de afbeelding niet leesbaar');
   }
+  if (width > max.width || height > max.height) throw bad('Afbeelding te groot');
+  if (!PNG_DEPTHS[colorType]?.includes(bits)) throw bad('PNG-kleurtype of bitdiepte niet ondersteund');
+  if (png.compressionMethod !== 0 || png.filterMethod !== 0 || png.interlaceMethod !== 0) {
+    throw bad('PNG-indeling niet ondersteund');
+  }
+  if (png.imgData.length === 0) throw bad('PNG zonder pixeldata');
 
-  const idat = pngImageData(data);
-  if (idat === undefined || idat.length === 0) throw new InvalidImageError('PNG zonder pixeldata');
-
-  const expected = height * (1 + Math.ceil((width * format.channels * bitDepth) / 8));
+  const channels = png.colors + (png.hasAlphaChannel ? 1 : 0);
+  const expected = height * (1 + Math.ceil((width * channels * bits) / 8));
   let pixels: Buffer;
   try {
     // Stops with an error as soon as the output would grow past `expected`.
-    pixels = inflateSync(idat, { maxOutputLength: expected });
+    pixels = inflateSync(png.imgData, { maxOutputLength: expected });
   } catch {
-    throw new InvalidImageError('PNG-pixeldata ongeldig of te groot');
+    throw bad('PNG-pixeldata ongeldig of te groot');
   }
-  if (pixels.length !== expected) throw new InvalidImageError('PNG-pixeldata past niet bij de afmetingen');
+  if (pixels.length !== expected) throw bad('PNG-pixeldata past niet bij de afmetingen');
+}
+
+/** Both PNG checks: the strict structure, then what png-js parsed. Throws InvalidImageError. */
+export function checkPng(data: Buffer, max: ImageSize): void {
+  checkPngStructure(data);
+  checkPngPixels(data, max);
 }

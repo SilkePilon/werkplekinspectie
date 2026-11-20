@@ -58,3 +58,38 @@ export function makePng(opts: PngOptions): Buffer {
 }
 
 export const pngDataUrl = (png: Buffer) => `data:image/png;base64,${png.toString('base64')}`;
+
+// Parser-differential shapes: a check that reads chunks differently from png-js (which
+// pdfkit uses) would see a harmless 10x10 image where png-js sees something huge.
+
+function ihdrChunk(width: number, height: number, bitDepth = 8, colorType = 6, extra: Buffer = Buffer.alloc(0)): Buffer {
+  const b = Buffer.alloc(13);
+  b.writeUInt32BE(width, 0);
+  b.writeUInt32BE(height, 4);
+  b[8] = bitDepth;
+  b[9] = colorType;
+  return pngChunk('IHDR', Buffer.concat([b, extra]));
+}
+
+/** IDAT + IEND hidden as payload, preceded by 4 bytes a sloppy parser takes as a CRC. */
+function hiddenBomb(rawBytes: number): Buffer {
+  const bomb = deflateSync(Buffer.alloc(rawBytes), { level: 9 });
+  return Buffer.concat([Buffer.alloc(4), pngChunk('IDAT', bomb), pngChunk('IEND')]);
+}
+
+const SMALL_IDAT = () => pngChunk('IDAT', deflateSync(Buffer.alloc(pngRawBytes(10, 10))));
+
+/** 10x10 first, then a second IHDR declaring side x side: png-js lets the later one win. */
+export function pngSecondIhdr(side: number): Buffer {
+  return Buffer.concat([SIGNATURE, ihdrChunk(10, 10), ihdrChunk(side, side), SMALL_IDAT(), pngChunk('IEND')]);
+}
+
+/** tRNS on an RGBA PNG: png-js does not skip its data, so it parses the IDAT bomb inside. */
+export function pngHiddenInTrns(rawBytes: number): Buffer {
+  return Buffer.concat([SIGNATURE, ihdrChunk(10, 10), pngChunk('tRNS', hiddenBomb(rawBytes)), SMALL_IDAT(), pngChunk('IEND')]);
+}
+
+/** IHDR longer than 13 bytes: png-js reads 13 and parses the IDAT bomb in the rest. */
+export function pngHiddenInLongIhdr(rawBytes: number): Buffer {
+  return Buffer.concat([SIGNATURE, ihdrChunk(10, 10, 8, 6, hiddenBomb(rawBytes)), SMALL_IDAT(), pngChunk('IEND')]);
+}
