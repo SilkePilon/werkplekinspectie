@@ -5,6 +5,8 @@ import {
   formatDate,
   formatDateTime,
   formatDay,
+  formatDayShort,
+  formatDateLong,
 } from '../../src/shared/dates.js';
 
 describe('Amsterdam dates', () => {
@@ -49,5 +51,16 @@ describe('Amsterdam dates', () => {
   test('formatDay turns YYYY-MM-DD into dd-mm-yyyy without time-zone shifts', () => {
     expect(formatDay('2026-11-27')).toBe('27-11-2026');
     expect(formatDay('2027-01-01')).toBe('01-01-2027');
+  });
+
+  test('formatDayShort: "4 dec" with Dutch month abbreviations, no time-zone shifts', () => {
+    expect(formatDayShort('2026-12-04')).toBe('4 dec');
+    expect(formatDayShort('2027-03-31')).toBe('31 mrt');
+    expect(formatDayShort('2027-01-01')).toBe('1 jan');
+  });
+
+  test('formatDateLong: "20 nov 2026" in Europe/Amsterdam', () => {
+    expect(formatDateLong('2026-11-20T09:15:00+01:00')).toBe('20 nov 2026');
+    expect(formatDateLong('2026-05-31T23:30:00Z')).toBe('1 jun 2026');
   });
 });

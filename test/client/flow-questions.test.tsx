@@ -212,7 +212,7 @@ describe('question flow', () => {
     });
     await user.click(screen.getByText('Ja'));
     await tick(300);
-    const message = 'Opslaan lukt niet. Je telefoon heeft te weinig ruimte. Verwijder een foto.';
+    const message = 'Opslaan op deze telefoon lukt niet. Probeer het opnieuw of verwijder een foto.';
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe(message);
     expect(screen.getByText(Q1B)).toBeTruthy();
@@ -305,7 +305,9 @@ describe('question flow', () => {
     expect(screen.getByText(Q9B)).toBeTruthy();
     await user.click(screen.getByText('Ja'));
     await tick(300);
-    expect(screen.getByRole('heading', { name: 'Wat gaat hier goed?' })).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { name: 'Wat gaat hier goed? Waar kan de rest van het bedrijf van leren?' }),
+    ).toBeTruthy();
   });
 
   test('a question opened from the summary returns to the summary', async () => {

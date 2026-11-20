@@ -52,3 +52,18 @@ export function formatDay(isoDate: string): string {
   const [y, m, d] = isoDate.split('-');
   return `${d}-${m}-${y}`;
 }
+
+// Fixed list instead of Intl: browsers differ on dots ("dec.") in Dutch short months.
+const MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+
+/** A plain calendar date YYYY-MM-DD → "4 dec" (no time zone involved). */
+export function formatDayShort(isoDate: string): string {
+  const [, m, d] = isoDate.split('-');
+  return `${Number(d)} ${MONTHS[Number(m) - 1] ?? ''}`;
+}
+
+/** "20 nov 2026" in Europe/Amsterdam. */
+export function formatDateLong(iso: string): string {
+  const p = amsterdamParts(iso);
+  return `${Number(p.day)} ${MONTHS[Number(p.month) - 1] ?? ''} ${p.year}`;
+}

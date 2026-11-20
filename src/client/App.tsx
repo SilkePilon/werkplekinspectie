@@ -1,23 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
 import type { Submission } from '@shared/schema';
+import { GoodPracticeScreen } from './screens/GoodPracticeScreen';
 import { QuestionScreen } from './screens/QuestionScreen';
+import { SignatureScreen } from './screens/SignatureScreen';
 import { StartScreen, type StartFields } from './screens/StartScreen';
+import { SummaryScreen } from './screens/SummaryScreen';
 import { draftReducer, newDraft, nextUnanswered, type Draft, type DraftAction } from './state/draft';
+import { useAutosave } from './state/useAutosave';
 import {
   clearDraft,
   getRememberedName,
   listOutbox,
   loadDraft,
   purgeExpired,
-  saveDraft,
   setRememberedName,
 } from './storage/db';
 
 export type Screen =
   | { name: 'start' }
   | { name: 'question'; id: QuestionId; returnTo?: 'summary' }
-  | { name: 'goodPractice' }
+  | { name: 'goodPractice'; returnTo?: 'summary' }
   | { name: 'summary' }
   | { name: 'signature' };
 
@@ -28,7 +31,6 @@ export type Screen =
 export type DraftDispatch = (update: DraftAction | ((d: Draft) => DraftAction | null)) => void;
 
 const START: Screen = { name: 'start' };
-const AUTOSAVE_MS = 300;
 
 const isQuestionId = (v: unknown): v is QuestionId => QUESTION_IDS.includes(v as QuestionId);
 
@@ -42,6 +44,7 @@ function screenFromState(state: unknown): Screen {
       if (!isQuestionId(id)) return START;
       return returnTo === 'summary' ? { name, id, returnTo } : { name, id };
     case 'goodPractice':
+      return returnTo === 'summary' ? { name, returnTo } : { name };
     case 'summary':
     case 'signature':
       return { name };
@@ -52,62 +55,6 @@ function screenFromState(state: unknown): Screen {
 
 function pushScreen(screen: Screen) {
   history.pushState({ screen }, '');
-}
-
-/**
- * Saves ~300ms after the last change, and at once when asked (page hidden, unmount).
- * `failed` stays true from a failed save until the next one succeeds.
- */
-function useAutosave() {
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pending = useRef<Draft | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  const flush = useCallback(() => {
-    clearTimeout(timer.current);
-    timer.current = undefined;
-    const d = pending.current;
-    pending.current = null;
-    if (!d) return;
-    saveDraft(d).then(
-      () => setFailed(false),
-      () => {
-        // Storage full or blocked. Keep it for the next flush unless a newer change is waiting;
-        // every later change saves the whole draft again anyway.
-        pending.current ??= d;
-        setFailed(true);
-      },
-    );
-  }, []);
-
-  const schedule = useCallback(
-    (d: Draft) => {
-      pending.current = d;
-      clearTimeout(timer.current);
-      timer.current = setTimeout(flush, AUTOSAVE_MS);
-    },
-    [flush],
-  );
-
-  const cancel = useCallback(() => {
-    clearTimeout(timer.current);
-    timer.current = undefined;
-    pending.current = null;
-    setFailed(false);
-  }, []);
-
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') flush();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      flush();
-    };
-  }, [flush]);
-
-  return { schedule, cancel, failed };
 }
 
 function useHasLogo(): boolean {
@@ -250,13 +197,36 @@ export function App() {
           />
         );
       }
-      // Stand-ins until Task 12 builds these screens.
       case 'goodPractice':
-        return <Placeholder title="Wat gaat hier goed?" />;
+        return (
+          <GoodPracticeScreen
+            draft={draft}
+            dispatch={dispatch}
+            fromSummary={screen.returnTo === 'summary'}
+            onNext={() => navigate({ name: 'summary' })}
+            onClose={() => navigate(START)}
+          />
+        );
       case 'summary':
-        return <Placeholder title="Klopt alles?" />;
+        return (
+          <SummaryScreen
+            draft={draft}
+            onEdit={(id) => navigate({ name: 'question', id, returnTo: 'summary' })}
+            onEditGoodPractice={() => navigate({ name: 'goodPractice', returnTo: 'summary' })}
+            onNext={() => navigate({ name: 'signature' })}
+            onClose={() => navigate(START)}
+          />
+        );
       case 'signature':
-        return <Placeholder title="Handtekening" />;
+        return (
+          <SignatureScreen
+            draft={draft}
+            dispatch={dispatch}
+            // Task 13 sends the signed draft from here.
+            onSend={() => undefined}
+            onClose={() => navigate(START)}
+          />
+        );
     }
   }
 
@@ -279,15 +249,7 @@ function SaveFailedAlert() {
         <circle cx="12" cy="12" r="9" />
         <path d="M12 7.5v5.5M12 16.5v.01" />
       </svg>
-      Opslaan lukt niet. Je telefoon heeft te weinig ruimte. Verwijder een foto.
+      Opslaan op deze telefoon lukt niet. Probeer het opnieuw of verwijder een foto.
     </div>
-  );
-}
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <main className="flex flex-1 flex-col px-[18px] pt-[22px]">
-      <h1 className="mt-2.5 mb-1 text-[30px] font-black leading-[1.1]">{title}</h1>
-    </main>
   );
 }
