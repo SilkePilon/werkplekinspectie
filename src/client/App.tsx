@@ -10,6 +10,7 @@ import { StartScreen, type StartFields } from './screens/StartScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
 import { draftReducer, newDraft, nextUnanswered, type Draft, type DraftAction } from './state/draft';
 import { useAutosave } from './state/useAutosave';
+import { useBackOnline } from './state/useBackOnline';
 import { useSend } from './state/useSend';
 import {
   clearDraft,
@@ -88,6 +89,7 @@ export function App() {
   const [outbox, setOutbox] = useState<Submission[]>([]);
   const [screen, setScreen] = useState<Screen>(START);
   const hasLogo = useHasLogo();
+  const backOnline = useBackOnline();
   const { schedule, cancel, failed: saveFailed } = useAutosave();
 
   useEffect(() => {
@@ -129,21 +131,21 @@ export function App() {
   }, []);
 
   const send = useSend({ draftRef, commit, schedule, cancelAutosave: cancel, navigate, setOutbox });
-  const { isSending } = send;
+  const { isDraftLocked } = send;
 
   const dispatch: DraftDispatch = useCallback(
     (update) => {
       const current = draftRef.current;
-      // While sending, the draft is on its way to the outbox: a change now would be lost or,
-      // through autosave, bring back the draft that sending clears.
-      if (!current || isSending()) return;
+      // While this draft is being sent it is on its way to the outbox: a change now would be
+      // lost or, through autosave, bring back the draft that sending clears.
+      if (!current || isDraftLocked()) return;
       const action = typeof update === 'function' ? update(current) : update;
       if (!action) return;
       const next = draftReducer(current, action);
       commit(next);
       schedule(next);
     },
-    [commit, schedule, isSending],
+    [commit, schedule, isDraftLocked],
   );
 
   function start(f: StartFields) {
@@ -190,6 +192,7 @@ export function App() {
         outcome={s.outcome}
         submission={sub}
         busy={send.sendingId === sub.submissionId}
+        otherDraftOpen={draft !== null && draft.id !== sub.submissionId}
         onDone={() => navigate(START)}
         onRetry={() => send.resend(sub)}
         onLater={() => navigate(START)}
@@ -214,6 +217,7 @@ export function App() {
           draft={draft}
           outbox={outbox}
           sendingId={send.sendingId}
+          backOnline={backOnline}
           onSendNow={send.resend}
           onStart={start}
           onResume={resume}

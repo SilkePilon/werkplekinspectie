@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { formatDate } from '@shared/dates';
 import { QUESTION_IDS } from '@shared/questions';
 import { LIMITS, type Submission } from '@shared/schema';
@@ -25,8 +25,10 @@ export interface StartScreenProps {
   onDiscard: () => void;
   /** "Nu versturen" on an outbox item. */
   onSendNow: (s: Submission) => void;
-  /** The outbox item being sent right now, if any. */
+  /** The outbox item being sent right now, if any. Starting or resuming waits for it. */
   sendingId: string | null;
+  /** The phone got internet back since the app opened. */
+  backOnline: boolean;
 }
 
 const inputClass =
@@ -43,6 +45,7 @@ export function StartScreen({
   onDiscard,
   onSendNow,
   sendingId,
+  backOnline,
 }: StartScreenProps) {
   const [monteur, setMonteur] = useState(rememberedName);
   const [editName, setEditName] = useState(rememberedName === '');
@@ -51,13 +54,15 @@ export function StartScreen({
   const [website, setWebsite] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const ids = { naam: useId(), project: useId(), nummer: useId(), hint: useId(), outbox: useId() };
-  const backOnline = useBackOnline();
 
   const complete = [monteur, project, projectnummer].every((v) => v.trim() !== '');
+  // While an outbox item is sent, its result screen opens when it is done: don't start
+  // something that would be interrupted.
+  const sending = sendingId !== null;
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!complete || draft) return;
+    if (!complete || draft || sending) return;
     onStart({ monteur: monteur.trim(), project: project.trim(), projectnummer: projectnummer.trim(), website });
   }
 
@@ -92,7 +97,7 @@ export function StartScreen({
                   <ChunkyButton
                     variant="line"
                     busy={sendingId === s.submissionId}
-                    disabled={sendingId !== null}
+                    disabled={sending}
                     onClick={() => onSendNow(s)}
                   >
                     Nu versturen
@@ -127,7 +132,9 @@ export function StartScreen({
               {draft.project} · {Object.keys(draft.answers).length} van {QUESTION_IDS.length} vragen gedaan
             </p>
             <div className="flex flex-col gap-3">
-              <ChunkyButton onClick={onResume}>Verder gaan</ChunkyButton>
+              <ChunkyButton disabled={sending} onClick={onResume}>
+                Verder gaan
+              </ChunkyButton>
               <ChunkyButton variant="line" onClick={() => setConfirmDiscard(true)}>
                 Weggooien
               </ChunkyButton>
@@ -185,7 +192,11 @@ export function StartScreen({
 
       {!draft && (
         <footer className="px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
-          <ChunkyButton type="submit" disabled={!complete} aria-describedby={complete ? undefined : ids.hint}>
+          <ChunkyButton
+            type="submit"
+            disabled={!complete || sending}
+            aria-describedby={complete ? undefined : ids.hint}
+          >
             Start inspectie
           </ChunkyButton>
           {!complete && (
@@ -215,22 +226,6 @@ export function StartScreen({
       </Sheet>
     </form>
   );
-}
-
-/** True after the phone gets internet again, until it loses it. */
-function useBackOnline(): boolean {
-  const [back, setBack] = useState(false);
-  useEffect(() => {
-    const on = () => setBack(true);
-    const off = () => setBack(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', off);
-    };
-  }, []);
-  return back;
 }
 
 function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {

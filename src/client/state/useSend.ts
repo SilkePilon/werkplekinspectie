@@ -34,22 +34,31 @@ function questionOf(field: string | undefined): QuestionId | undefined {
 export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, setOutbox }: SendDeps) {
   // Set before the first await, so a second tap in the same moment finds it set.
   const inFlight = useRef(false);
+  // Only while the open draft itself is being sent: App then drops changes to it.
+  const draftLocked = useRef(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   // Writing to the phone's storage failed while sending; App shows the save-failed alert.
   const [storeFailed, setStoreFailed] = useState(false);
   const [last, setLast] = useState<LastSend | null>(null);
 
-  const isSending = useCallback(() => inFlight.current, []);
+  const isDraftLocked = useCallback(() => draftLocked.current, []);
 
-  /** Runs one send at a time; a call while one runs is dropped. */
-  const exclusive = useCallback((id: string, work: () => Promise<void>) => {
+  /**
+   * Runs one send at a time; a call while one runs is dropped. An unexpected error shows the
+   * save-failed alert instead of escaping as an unhandled rejection.
+   */
+  const exclusive = useCallback((id: string, work: () => Promise<void>, lockDraft = false) => {
     if (inFlight.current) return;
     inFlight.current = true;
+    draftLocked.current = lockDraft;
     setSendingId(id);
-    void work().finally(() => {
-      inFlight.current = false;
-      setSendingId(null);
-    });
+    void work()
+      .catch(() => setStoreFailed(true))
+      .finally(() => {
+        inFlight.current = false;
+        draftLocked.current = false;
+        setSendingId(null);
+      });
   }, []);
 
   const dropFromOutbox = useCallback(
@@ -83,34 +92,46 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
     (signature: string, signedAt: string) => {
       const current = draftRef.current;
       if (!current) return;
-      exclusive(current.id, async () => {
-        // No autosave may run from here: a late one could bring back the draft cleared below.
-        cancelAutosave();
-        const signed = draftReducer(current, { type: 'sign', signature, at: signedAt });
-        commit(signed);
-        let sub: Submission;
-        try {
-          sub = toSubmission(signed);
-        } catch (err) {
-          if (!(err instanceof IncompleteDraftError)) throw err;
-          schedule(signed);
-          navigate({ name: 'summary' });
-          return;
-        }
-        try {
-          await addToOutbox(sub);
-        } catch {
-          schedule(signed);
-          setStoreFailed(true);
-          return;
-        }
-        setStoreFailed(false);
-        setOutbox((o) => [...o.filter((s) => s.submissionId !== sub.submissionId), sub]);
-        // If clearing fails, the leftover draft has the same submissionId; the server mails an id once.
-        await clearDraft().catch(() => undefined);
-        await post(sub);
-        if (draftRef.current?.id === sub.submissionId) commit(null);
-      });
+      exclusive(
+        current.id,
+        async () => {
+          // No autosave may run from here: a late one could bring back the draft cleared below.
+          cancelAutosave();
+          const signed = draftReducer(current, { type: 'sign', signature, at: signedAt });
+          commit(signed);
+          let queued = false;
+          try {
+            let sub: Submission;
+            try {
+              sub = toSubmission(signed);
+            } catch (err) {
+              if (!(err instanceof IncompleteDraftError)) throw err;
+              schedule(signed);
+              navigate({ name: 'summary' });
+              return;
+            }
+            try {
+              await addToOutbox(sub);
+            } catch {
+              schedule(signed);
+              setStoreFailed(true);
+              return;
+            }
+            queued = true;
+            setStoreFailed(false);
+            setOutbox((o) => [...o.filter((s) => s.submissionId !== sub.submissionId), sub]);
+            // If clearing fails, the leftover draft has the same submissionId; the server mails an id once.
+            await clearDraft().catch(() => undefined);
+            await post(sub);
+            if (draftRef.current?.id === sub.submissionId) commit(null);
+          } catch (err) {
+            // Not expected. Until the outbox has it, the draft is the only copy: keep saving it.
+            if (!queued) schedule(signed);
+            throw err;
+          }
+        },
+        true,
+      );
     },
     [draftRef, exclusive, cancelAutosave, commit, schedule, navigate, setOutbox, post],
   );
@@ -121,16 +142,14 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
   /**
    * "Aanpassen" after the server refused it: back into the draft (to be signed again), out of
    * the outbox, to the summary with the first named question highlighted. Never overwrites a
-   * different inspection that is still open; then it stays in the outbox.
+   * different inspection that is still open; then nothing happens and it stays in the outbox.
    */
   const fix = useCallback(
     (sub: Submission, fields: string[] | undefined) =>
       exclusive(sub.submissionId, async () => {
+        // The result screen says to finish or discard the other inspection first.
         const open = draftRef.current;
-        if (open && open.id !== sub.submissionId) {
-          navigate({ name: 'start' });
-          return;
-        }
+        if (open && open.id !== sub.submissionId) return;
         const d = draftFromSubmission(sub);
         cancelAutosave();
         try {
@@ -148,5 +167,5 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
     [exclusive, draftRef, navigate, cancelAutosave, dropFromOutbox, commit],
   );
 
-  return { sendDraft, resend, fix, isSending, sendingId, storeFailed, last };
+  return { sendDraft, resend, fix, isDraftLocked, sendingId, storeFailed, last };
 }

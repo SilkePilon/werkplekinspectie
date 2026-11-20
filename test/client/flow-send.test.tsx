@@ -383,18 +383,40 @@ describe('result screens', () => {
     expect(screen.queryByText('Kijk hier nog eens naar.')).toBeNull();
   });
 
-  test('400 from the outbox while another inspection is open: that draft is never overwritten', async () => {
+  test('400 from the outbox while another inspection is open: says so, and that draft is never overwritten', async () => {
     const user = setup();
     inspecties = reply(400, { status: 'ongeldig', fields: ['answers.1A'] });
     const open = await seed();
     const other = await outboxItem('Ander project');
     render(<App />);
     await user.click(button('Nu versturen', await screen.findByRole('region', { name: 'Nog te versturen' })));
-    await user.click(await screen.findByRole('button', { name: 'Aanpassen' }));
+
+    expect(await screen.findByText('Er klopt iets niet in de inspectie.')).toBeTruthy();
+    expect(screen.getByText('Maak eerst je andere inspectie af of gooi hem weg.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Aanpassen' })).toBeNull();
+    await user.click(button('Later versturen'));
 
     expect(await screen.findByText('Je bent nog bezig met een inspectie')).toBeTruthy();
     expect((await draftOnDisk())?.id).toBe(open.id);
     expect((await listOutbox()).map((s) => s.submissionId)).toEqual([other.submissionId]);
+  });
+
+  test('an unexpected error while sending: the alert, the draft kept, no unhandled rejection', async () => {
+    const user = setup();
+    // Broken data from storage: toSubmission throws a TypeError, not IncompleteDraftError.
+    const d = await seed(
+      { ...allJa(), '4B': 'nee' },
+      { '4B': { comment: 'Kapot.', actionBefore: '2099-12-04', photos: null as unknown as string[] } },
+    );
+    await user.click(await readyToSend(user));
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Zet je handtekening' })).toBeTruthy();
+    expect(button('Verstuur inspectie').getAttribute('aria-busy')).toBeNull();
+    expect(posts()).toEqual([]);
+    const kept = await draftOnDisk();
+    expect(kept?.id).toBe(d.id);
+    expect(kept?.signature).toBe(SIGNATURE);
   });
 });
 
@@ -442,6 +464,64 @@ describe('start screen outbox', () => {
     expect(await screen.findByRole('heading', { name: 'Verstuurd!' })).toBeTruthy();
     expect(posts()).toHaveLength(1);
     await user.click(button('Klaar'));
+  });
+
+  test('during "Nu versturen", Start inspectie waits; afterwards it works again', async () => {
+    const user = setup();
+    let answer: (r: Response) => void = () => undefined;
+    inspecties = () => new Promise((resolve) => (answer = resolve));
+    await outboxItem('Ander project');
+    render(<App />);
+    await user.type(await screen.findByLabelText('Naam'), 'J. Jansen');
+    await user.type(screen.getByLabelText('Project'), 'Voorbeeld B.V.');
+    await user.type(screen.getByLabelText('Projectnummer'), 'P-1');
+    expect(button('Start inspectie').disabled).toBe(false);
+
+    await user.click(button('Nu versturen'));
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(button('Start inspectie').disabled).toBe(true);
+    fireEvent.click(button('Start inspectie'));
+    expect(screen.getByRole('button', { name: 'Start inspectie' })).toBeTruthy();
+
+    await act(async () => answer(new Response(JSON.stringify({ status: 'verzonden' }), { status: 200 })));
+    await user.click(await screen.findByRole('button', { name: 'Klaar' }));
+    await user.type(await screen.findByLabelText('Naam'), 'J. Jansen');
+    await user.type(screen.getByLabelText('Project'), 'Voorbeeld B.V.');
+    await user.type(screen.getByLabelText('Projectnummer'), 'P-1');
+    expect(button('Start inspectie').disabled).toBe(false);
+  });
+
+  test('during "Nu versturen", Verder gaan waits; afterwards no change to the draft is dropped', async () => {
+    const user = setup();
+    let answer: (r: Response) => void = () => undefined;
+    inspecties = () => new Promise((resolve) => (answer = resolve));
+    await seed({});
+    await outboxItem('Ander project');
+    render(<App />);
+    await user.click(button('Nu versturen', await screen.findByRole('region', { name: 'Nog te versturen' })));
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(button('Verder gaan').disabled).toBe(true);
+    expect(button('Nu versturen').getAttribute('aria-busy')).toBe('true');
+
+    await act(async () => answer(new Response(JSON.stringify({ status: 'verzonden' }), { status: 200 })));
+    await user.click(await screen.findByRole('button', { name: 'Klaar' }));
+    expect(button('Verder gaan').disabled).toBe(false);
+    await user.click(button('Verder gaan'));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await user.click(screen.getByText('Ja'));
+    expect((await draftOnDisk())?.answers['1A']).toBe('ja');
+  });
+
+  test('back online on another screen: the banner is there when the technician is back on start', async () => {
+    const user = setup();
+    await seed();
+    await user.click(await readyToSend(user));
+    await screen.findByRole('heading', { name: 'Nog niet verstuurd' });
+    act(() => {
+      dispatchEvent(new Event('online'));
+    });
+    await user.click(button('Later versturen'));
+    expect((await screen.findByRole('status')).textContent).toBe(BACK_ONLINE);
   });
 
   test('back online: a banner while there is something to send; gone when offline again', async () => {

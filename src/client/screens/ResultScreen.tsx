@@ -11,6 +11,8 @@ export interface ResultScreenProps {
   submission: Submission;
   /** A retry of this inspection is running. */
   busy: boolean;
+  /** Another inspection is open, so a refused one cannot go back into the draft yet. */
+  otherDraftOpen: boolean;
   /** "Klaar", after Verstuurd!. */
   onDone: () => void;
   /** "Opnieuw proberen": the same stored inspection again. */
@@ -41,7 +43,16 @@ function stats(s: Submission) {
   return { questions: QUESTION_IDS.length, nee, photos };
 }
 
-export function ResultScreen({ outcome, submission, busy, onDone, onRetry, onLater, onFix }: ResultScreenProps) {
+export function ResultScreen({
+  outcome,
+  submission,
+  busy,
+  otherDraftOpen,
+  onDone,
+  onRetry,
+  onLater,
+  onFix,
+}: ResultScreenProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   // A new screen after waiting: move focus to its title so screen readers read the result.
   useEffect(() => heading.current?.focus(), [outcome]);
@@ -71,9 +82,24 @@ export function ResultScreen({ outcome, submission, busy, onDone, onRetry, onLat
         badge={<NotSentBadge icon="alert" />}
         title="Nog niet verstuurd"
         headingRef={heading}
-        footer={<ChunkyButton onClick={onFix}>Aanpassen</ChunkyButton>}
+        footer={
+          otherDraftOpen ? (
+            <ChunkyButton variant="line" onClick={onLater}>
+              Later versturen
+            </ChunkyButton>
+          ) : (
+            <ChunkyButton busy={busy} onClick={onFix}>
+              Aanpassen
+            </ChunkyButton>
+          )
+        }
       >
         <p className="m-0 text-[17px] text-sub">Er klopt iets niet in de inspectie.</p>
+        {otherDraftOpen && (
+          <p className="m-0 mt-[18px] rounded-[14px] bg-lila px-3.5 py-3 text-[15px] font-bold text-violet">
+            Maak eerst je andere inspectie af of gooi hem weg.
+          </p>
+        )}
       </Layout>
     );
   }
