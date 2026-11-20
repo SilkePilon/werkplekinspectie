@@ -3,6 +3,7 @@ import { formatDate } from '@shared/dates';
 import { QUESTION_IDS } from '@shared/questions';
 import { LIMITS, type Submission } from '@shared/schema';
 import type { Draft } from '../state/draft';
+import { useIosHint } from '../state/useIosHint';
 import { ChunkyButton } from '../ui/ChunkyButton';
 import { Sheet } from '../ui/Sheet';
 
@@ -29,6 +30,10 @@ export interface StartScreenProps {
   sendingId: string | null;
   /** The phone got internet back since the app opened. */
   backOnline: boolean;
+  /** A new app version is waiting. Only this screen offers it, never mid-inspection. */
+  updateAvailable: boolean;
+  /** "Vernieuwen": activate the new version and reload. */
+  onUpdate: () => void;
 }
 
 const inputClass =
@@ -46,6 +51,8 @@ export function StartScreen({
   onSendNow,
   sendingId,
   backOnline,
+  updateAvailable,
+  onUpdate,
 }: StartScreenProps) {
   const [monteur, setMonteur] = useState(rememberedName);
   const [editName, setEditName] = useState(rememberedName === '');
@@ -53,6 +60,7 @@ export function StartScreen({
   const [projectnummer, setProjectnummer] = useState('');
   const [website, setWebsite] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [iosHint, dismissIosHint] = useIosHint();
   const ids = { naam: useId(), project: useId(), nummer: useId(), hint: useId(), outbox: useId() };
 
   const complete = [monteur, project, projectnummer].every((v) => v.trim() !== '');
@@ -74,6 +82,16 @@ export function StartScreen({
       </header>
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
+        {updateAvailable && (
+          <Notice role="status" action="Vernieuwen" onAction={onUpdate}>
+            Er is een nieuwe versie.
+          </Notice>
+        )}
+        {iosHint && (
+          <Notice action="Oké" onAction={dismissIosHint}>
+            Tip: zet de app op je beginscherm via Delen → Zet op beginscherm.
+          </Notice>
+        )}
         {outbox.length > 0 && backOnline && (
           <p
             role="status"
@@ -225,6 +243,29 @@ export function StartScreen({
         </div>
       </Sheet>
     </form>
+  );
+}
+
+function Notice({
+  role,
+  action,
+  onAction,
+  children,
+}: {
+  role?: 'status';
+  action: string;
+  onAction: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-3 rounded-chunky bg-lila px-3.5 py-3">
+      <p role={role} className="m-0 flex-1 text-[15px] font-extrabold text-violet">
+        {children}
+      </p>
+      <ChunkyButton variant="line" className="min-h-11 w-auto shrink-0 px-4" onClick={onAction}>
+        {action}
+      </ChunkyButton>
+    </div>
   );
 }
 

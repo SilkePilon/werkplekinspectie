@@ -45,6 +45,8 @@ const SEEN_TTL_MS = 24 * 60 * 60 * 1000;
 const PHOTO_MAX_PX = 2000;
 const SIGNATURE_MAX = { width: 2400, height: 1600 };
 const INDEX_HTML = 'index.html';
+/** Files with fixed names that the browser must revalidate: the app shell, service worker and manifest. */
+const NO_CACHE_FILES = [INDEX_HTML, 'sw.js', 'manifest.webmanifest'].map((name) => `/${name}`);
 const LOGO_TYPES = { svg: 'image/svg+xml', png: 'image/png' } as const;
 
 // Compiled to dist/server/server/app.js, so the client build is two levels up.
@@ -262,7 +264,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
     root: deps.staticRoot ?? DEFAULT_STATIC_ROOT,
     wildcard: false,
     setHeaders(res, path) {
-      if (path.endsWith(`/${INDEX_HTML}`)) res.header('cache-control', 'no-cache');
+      if (NO_CACHE_FILES.some((name) => path.endsWith(name))) res.header('cache-control', 'no-cache');
     },
   });
 

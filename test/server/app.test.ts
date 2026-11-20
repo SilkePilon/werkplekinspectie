@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Writable } from 'node:stream';
@@ -24,6 +24,8 @@ const cfg = loadConfig({
 
 const PDF = Buffer.from('%PDF-1.4 stub');
 const INDEX_HTML = '<!doctype html><title>Werkplekinspectie</title>';
+const SW_JS = 'self.skipWaiting;';
+const MANIFEST = '{"name":"Werkplekinspectie"}';
 const GIF_1X1 = 'R0lGODlhAQABAPAAAEMZYQAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
 const SVG_LOGO = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
 
@@ -74,6 +76,10 @@ const apps: FastifyInstance[] = [];
 beforeAll(() => {
   staticRoot = mkdtempSync(join(tmpdir(), 'werkplekinspectie-static-'));
   writeFileSync(join(staticRoot, 'index.html'), INDEX_HTML);
+  writeFileSync(join(staticRoot, 'sw.js'), SW_JS);
+  writeFileSync(join(staticRoot, 'manifest.webmanifest'), MANIFEST);
+  mkdirSync(join(staticRoot, 'assets'));
+  writeFileSync(join(staticRoot, 'assets', 'index-abc123.js'), SW_JS);
 });
 
 afterAll(() => {
@@ -351,6 +357,26 @@ describe('other routes', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-cache');
     expect(res.body).toBe(INDEX_HTML);
+  });
+
+  // The service worker and manifest have fixed names, so the browser must revalidate them.
+  test.each([
+    ['/sw.js', /^(text|application)\/javascript/, SW_JS],
+    ['/manifest.webmanifest', /^application\/manifest\+json/, MANIFEST],
+  ])('GET %s is served uncached with its content type', async (url, type, body) => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'GET', url });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(type);
+    expect(res.headers['cache-control']).toBe('no-cache');
+    expect(res.body).toBe(body);
+  });
+
+  test('hashed assets keep the default cache-control', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'GET', url: '/assets/index-abc123.js' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).not.toBe('no-cache');
   });
 
   test.each([

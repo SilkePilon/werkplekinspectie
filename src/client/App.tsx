@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
 import type { Submission } from '@shared/schema';
 import type { SubmitOutcome } from './api/submit';
@@ -90,6 +91,11 @@ export function App() {
   const [screen, setScreen] = useState<Screen>(START);
   const hasLogo = useHasLogo();
   const backOnline = useBackOnline();
+  // Registered once here (App never unmounts); the start screen shows the update banner.
+  const {
+    needRefresh: [needRefresh],
+    updateServiceWorker,
+  } = useRegisterSW();
   const { schedule, cancel, failed: saveFailed } = useAutosave();
 
   useEffect(() => {
@@ -218,6 +224,8 @@ export function App() {
           outbox={outbox}
           sendingId={send.sendingId}
           backOnline={backOnline}
+          updateAvailable={needRefresh}
+          onUpdate={() => void updateServiceWorker(true)}
           onSendNow={send.resend}
           onStart={start}
           onResume={resume}
