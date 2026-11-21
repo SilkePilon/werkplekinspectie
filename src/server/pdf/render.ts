@@ -159,12 +159,11 @@ function drawSignatures(doc: Doc, flow: Flow, sub: Submission, branding: Config[
   y += writeText(doc, `datum + tijd: ${formatDateTime(sub.signedAt)}`, x(1), y, inner, small);
   bottoms.push(y);
 
-  // 3. VGM functionaris, paraaf left empty
+  // 3. Handtekening VGM functionaris: laid out like the monteur's box, signed on paper later
   y = top + pad;
-  y += writeText(doc, `VGM functionaris: ${branding.vgmName}`.trim(), x(2), y, inner, label) + 4;
-  y += writeText(doc, 'paraaf:', x(2), y, inner, small) + 2;
-  doc.lineWidth(0.5).strokeColor(COLORS.line).rect(x(2), y, 90, 28).stroke();
-  y += 28;
+  y += writeText(doc, `Handtekening VGM functionaris: ${branding.vgmName}`.trim(), x(2), y, inner, label) + 2;
+  y += sigHeight + 4;
+  y += writeText(doc, 'datum + tijd:', x(2), y, inner, small);
   bottoms.push(y);
 
   // 4. Afmelding, left empty

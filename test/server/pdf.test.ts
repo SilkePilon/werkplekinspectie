@@ -74,7 +74,7 @@ describe('renderInspectionPdf', () => {
       '20-11-2026 09:15',
       'Handtekening monteur:',
       '20-11-2026 09:42',
-      'VGM functionaris: M. Jansen',
+      'Handtekening VGM functionaris: M. Jansen',
       'Afmelding:',
       'Wat gaat hier goed en waar kan de rest van het bedrijf iets van leren?',
       'De werkplek was netjes afgezet.',
@@ -83,6 +83,9 @@ describe('renderInspectionPdf', () => {
     }
     // The paper form's empty "Reg:" row is left out.
     expect(page1).not.toContain('Reg:');
+    // The VGM box has no paraaf field any more; only Afmelding keeps one.
+    expect(page1.split('paraaf:')).toHaveLength(2);
+    expect(page1.split('datum+tijd:')).toHaveLength(4);
   });
 
   test('every page has the footer with Internal, Blad n and the signing time in Amsterdam', async () => {

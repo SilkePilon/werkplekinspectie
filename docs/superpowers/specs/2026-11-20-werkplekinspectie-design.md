@@ -162,7 +162,7 @@ pdfkit, **liggend A4**, nagebouwd naar het Word-formulier:
   Origineel: Afdeling {afdeling, configuratie, standaard "Customer Care"}, Kopie: VG functionaris (geen Reg-rij),
   Project, Projectnummer.
 - Blok handtekeningen: *Inspectie uitgevoerd door* = naam monteur + datum/tijd; *Handtekening monteur* =
-  handtekening-afbeelding + datum/tijd; *VGM functionaris: {naam uit configuratie}* paraaf leeg; *Afmelding / gezien d.d.* leeg.
+  handtekening-afbeelding + datum/tijd; *Handtekening VGM functionaris: {naam uit configuratie}* leeg, zelfde opbouw als de monteur (ruimte + datum + tijd); *Afmelding / gezien d.d.* leeg.
 - "Wat gaat hier goed en waar kan de rest van het bedrijf iets van leren?" met de tekst.
 - Tabel met kolommen zoals origineel: Omschrijving controlepunt | Ja | Nee | Nvt | Commentaar |
   Vastgesteld door (= naam monteur bij Nee) | Actie vóór (datum) | Actie uitgevoerd door (leeg) |
