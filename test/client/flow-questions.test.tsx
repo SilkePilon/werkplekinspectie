@@ -607,6 +607,23 @@ describe('photos', () => {
 });
 
 describe('start screen', () => {
+  test('the keyboard key goes to the next field; on the last one it starts once all is filled in', async () => {
+    const user = setup();
+    render(<App />);
+    const naam = await screen.findByLabelText('Naam');
+    expect(naam.getAttribute('enterkeyhint')).toBe('next');
+    await user.type(naam, 'J. Jansen{Enter}');
+    expect(document.activeElement).toBe(screen.getByLabelText('Project'));
+    await user.keyboard('Voorbeeld B.V.{Enter}');
+    const nummer = screen.getByLabelText('Projectnummer');
+    expect(document.activeElement).toBe(nummer);
+    expect(nummer.getAttribute('enterkeyhint')).toBe('go');
+    // The Start button rides above the keyboard.
+    expect(button('Start inspectie').closest('footer')!.className).toContain('bottom-[var(--keyboard-inset,0px)]');
+    await user.keyboard('P-1{Enter}');
+    expect(screen.getByText(Q1A)).toBeTruthy();
+  });
+
   test('shows the logo only when the server has one', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ hasLogo: true }) });
     const { container, unmount } = render(<App />);

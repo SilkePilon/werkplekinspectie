@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate } from '@shared/dates';
 import { QUESTION_IDS } from '@shared/questions';
 import { LIMITS, type Submission } from '@shared/schema';
@@ -36,8 +36,9 @@ export interface StartScreenProps {
   onUpdate: () => void;
 }
 
+// scroll-mb: a field focused under the sticky Start button is scrolled up past it.
 const inputClass =
-  'block w-full min-h-[52px] rounded-chunky border-2 border-grey bg-[#f7f7f7] px-3.5 py-3 text-[17px] font-bold text-ink ' +
+  'block w-full min-h-[52px] scroll-mb-[150px] rounded-chunky border-2 border-grey bg-[#f7f7f7] px-3.5 py-3 text-[17px] font-bold text-ink ' +
   'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-d';
 
 export function StartScreen({
@@ -169,6 +170,8 @@ export function StartScreen({
                   value={monteur}
                   maxLength={LIMITS.monteur}
                   autoComplete="name"
+                  enterKeyHint="next"
+                  onKeyDown={(e) => focusOnEnter(e, ids.project)}
                   onChange={(e) => setMonteur(e.target.value)}
                 />
               </Field>
@@ -180,6 +183,8 @@ export function StartScreen({
                 value={project}
                 maxLength={LIMITS.project}
                 autoComplete="off"
+                enterKeyHint="next"
+                onKeyDown={(e) => focusOnEnter(e, ids.nummer)}
                 onChange={(e) => setProject(e.target.value)}
               />
             </Field>
@@ -190,6 +195,7 @@ export function StartScreen({
                 value={projectnummer}
                 maxLength={LIMITS.projectnummer}
                 autoComplete="off"
+                enterKeyHint="go"
                 onChange={(e) => setProjectnummer(e.target.value)}
               />
             </Field>
@@ -218,7 +224,8 @@ export function StartScreen({
       </main>
 
       {!draft && (
-        <footer className="px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
+        // Sticky above the keyboard: Start stays in sight while typing, without scrolling.
+        <footer className="sticky bottom-[var(--keyboard-inset,0px)] z-10 bg-white px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
           <ChunkyButton
             type="submit"
             disabled={!complete || sending}
@@ -276,6 +283,13 @@ function Notice({
       </ChunkyButton>
     </div>
   );
+}
+
+/** The keyboard's "Volgende" key goes to the next field instead of submitting the form. */
+function focusOnEnter(e: KeyboardEvent<HTMLInputElement>, nextId: string) {
+  if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+  e.preventDefault();
+  document.getElementById(nextId)?.focus();
 }
 
 function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {

@@ -44,9 +44,10 @@ export function NoteSheet({ open, onOpenChange, text, onChange, onDone }: NoteSh
           Nog {left} tekens over.
         </p>
       )}
-      <ChunkyButton className="mt-4" onClick={onDone}>
-        Klaar
-      </ChunkyButton>
+      {/* Sticky: with the keyboard open the sheet may scroll, Klaar stays in sight. */}
+      <div className="sticky -bottom-px -mx-[18px] mt-2 bg-white px-[18px] pt-2">
+        <ChunkyButton onClick={onDone}>Klaar</ChunkyButton>
+      </div>
     </Sheet>
   );
 }

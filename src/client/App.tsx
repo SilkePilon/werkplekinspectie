@@ -13,6 +13,7 @@ import { draftReducer, newDraft, nextUnanswered, type Draft, type DraftAction } 
 import { useAutosave } from './state/useAutosave';
 import { useBackOnline } from './state/useBackOnline';
 import { useSend } from './state/useSend';
+import { useKeyboardInset } from './ui/useKeyboardInset';
 import {
   clearDraft,
   getRememberedName,
@@ -127,6 +128,7 @@ export function App() {
     setScreen(s);
   }, []);
   const hasLogo = useHasLogo();
+  useKeyboardInset();
   const backOnline = useBackOnline();
   // Registered once here (App never unmounts); the start screen shows the update banner.
   const {

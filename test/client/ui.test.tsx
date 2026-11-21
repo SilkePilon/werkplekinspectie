@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, test, vi } from 'vitest';
@@ -6,6 +6,7 @@ import { AnswerGroup, type Answer } from '../../src/client/ui/AnswerGroup';
 import { ChunkyButton } from '../../src/client/ui/ChunkyButton';
 import { ProgressBar } from '../../src/client/ui/ProgressBar';
 import { Sheet } from '../../src/client/ui/Sheet';
+import { useKeyboardInset } from '../../src/client/ui/useKeyboardInset';
 
 function radio(name: string): HTMLInputElement {
   return screen.getByRole('radio', { name }) as HTMLInputElement;
@@ -174,5 +175,63 @@ describe('Sheet', () => {
       </Sheet>,
     );
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('useKeyboardInset', () => {
+  /** A stand-in for window.visualViewport, which jsdom does not have. */
+  function fakeViewport(init: { height: number; offsetTop?: number; scale?: number }) {
+    const vv = Object.assign(new EventTarget(), { offsetTop: 0, scale: 1, ...init });
+    Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
+    return vv;
+  }
+
+  function Probe() {
+    useKeyboardInset();
+    return null;
+  }
+
+  const cssVar = (name: string) => document.documentElement.style.getPropertyValue(name);
+
+  test('measures how much the keyboard covers, and the visible height', async () => {
+    vi.stubGlobal('innerHeight', 800);
+    const vv = fakeViewport({ height: 800 });
+    const { unmount } = render(<Probe />);
+    expect(cssVar('--keyboard-inset')).toBe('0px');
+    expect(cssVar('--visual-height')).toBe('800px');
+
+    // iOS: the keyboard shrinks the visual viewport; Safari also scrolls it a bit.
+    Object.assign(vv, { height: 440, offsetTop: 60 });
+    await act(async () => {
+      vv.dispatchEvent(new Event('resize'));
+      await new Promise((r) => requestAnimationFrame(r));
+    });
+    expect(cssVar('--keyboard-inset')).toBe('300px');
+    expect(cssVar('--visual-height')).toBe('440px');
+
+    unmount();
+    expect(cssVar('--keyboard-inset')).toBe('');
+    vi.unstubAllGlobals();
+  });
+
+  test('pinch zoom is not a keyboard', () => {
+    vi.stubGlobal('innerHeight', 800);
+    fakeViewport({ height: 400, scale: 2 });
+    render(<Probe />);
+    expect(cssVar('--keyboard-inset')).toBe('0px');
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('Sheet above the keyboard', () => {
+  test('sits on the keyboard inset and is never taller than the visible height', () => {
+    render(
+      <Sheet open onOpenChange={() => undefined} title="Test">
+        <p>inhoud</p>
+      </Sheet>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Test' });
+    expect(dialog.className).toContain('bottom-[var(--keyboard-inset,0px)]');
+    expect(dialog.className).toContain('var(--visual-height,100dvh)');
   });
 });

@@ -54,7 +54,8 @@ export function GoodPracticeScreen({
           rows={6}
           onChange={(e) => dispatch({ type: 'goodPractice', text: e.target.value })}
           className={
-            'block min-h-[150px] w-full resize-y rounded-chunky border-2 border-grey bg-[#f7f7f7] p-3.5 text-[17px] font-bold text-ink ' +
+            // scroll-mb: keeps the text box clear of the sticky buttons below it while typing.
+            'block min-h-[150px] w-full resize-y scroll-mb-[170px] rounded-chunky border-2 border-grey bg-[#f7f7f7] p-3.5 text-[17px] font-bold text-ink ' +
             'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-d'
           }
         />
@@ -63,7 +64,8 @@ export function GoodPracticeScreen({
         </p>
       </main>
 
-      <footer className="flex flex-col gap-1.5 px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
+      {/* Sticky above the keyboard, so Volgende is in sight while typing. */}
+      <footer className="sticky bottom-[var(--keyboard-inset,0px)] z-10 flex flex-col gap-1.5 bg-white px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
         <ChunkyButton onClick={onNext}>Volgende</ChunkyButton>
         <ChunkyButton
           variant="ghost"

@@ -204,9 +204,12 @@ export function NeeSheet({
         </ul>
       )}
 
-      <ChunkyButton variant="coral" onClick={submit}>
-        Doorgaan
-      </ChunkyButton>
+      {/* Sticky: with the keyboard open the sheet may scroll, Doorgaan stays in sight. */}
+      <div className="sticky -bottom-px -mx-[18px] bg-roze px-[18px] pt-2">
+        <ChunkyButton variant="coral" onClick={submit}>
+          Doorgaan
+        </ChunkyButton>
+      </div>
     </Sheet>
   );
 }

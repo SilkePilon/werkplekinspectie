@@ -34,7 +34,9 @@ export function Sheet({ open, onOpenChange, title, tone = 'default', children, c
           // No separate description: the content itself explains what to do.
           aria-describedby={undefined}
           className={cn(
-            'fixed inset-x-0 bottom-0 z-50 mx-auto max-h-[92dvh] w-full max-w-[480px] overflow-y-auto',
+            // Above the keyboard on iOS too (useKeyboardInset), and never taller than what is visible.
+            'fixed inset-x-0 bottom-[var(--keyboard-inset,0px)] z-50 mx-auto w-full max-w-[480px] overflow-y-auto',
+            'max-h-[min(92dvh,calc(var(--visual-height,100dvh)-24px))]',
             'rounded-t-sheet px-[18px] pt-5 pb-[calc(22px+env(safe-area-inset-bottom))] text-ink outline-none',
             nee ? 'bg-roze' : 'bg-white',
             'motion-safe:data-[state=open]:animate-sheet-in motion-safe:data-[state=closed]:animate-sheet-out',
