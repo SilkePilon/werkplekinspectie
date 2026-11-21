@@ -178,7 +178,7 @@ describe('good practice', () => {
     expect(screen.getByText('Elke ochtend een toolbox.')).toBeTruthy();
 
     await user.click(button(/Wat gaat hier goed\?/));
-    expect(history.state).toEqual({ screen: { name: 'goodPractice', returnTo: 'summary' } });
+    expect((history.state as { screen: unknown }).screen).toEqual({ name: 'goodPractice', returnTo: 'summary' });
     expect((screen.getByRole('textbox', { name: GOOD }) as HTMLTextAreaElement).value).toBe(
       'Elke ochtend een toolbox.',
     );
@@ -222,7 +222,7 @@ describe('summary', () => {
     await openAt({ name: 'summary' });
     await user.click(button('Aanpassen', screen.getByRole('region', { name: 'Niet in orde' })));
     expect(screen.getByText(Q4B)).toBeTruthy();
-    expect(history.state).toEqual({ screen: { name: 'question', id: '4B', returnTo: 'summary' } });
+    expect((history.state as { screen: unknown }).screen).toEqual({ name: 'question', id: '4B', returnTo: 'summary' });
 
     await tick(300);
     await user.click(screen.getByText('Ja'));
@@ -240,7 +240,7 @@ describe('summary', () => {
     await openAt({ name: 'summary' });
     await user.click(button(/^4 Brandpreventie/));
     expect(screen.getByText(Q4A)).toBeTruthy();
-    expect(history.state).toEqual({ screen: { name: 'question', id: '4A', returnTo: 'summary' } });
+    expect((history.state as { screen: unknown }).screen).toEqual({ name: 'question', id: '4A', returnTo: 'summary' });
 
     await tick(300);
     await user.click(screen.getByText('Niet van toepassing'));
@@ -282,7 +282,7 @@ describe('summary', () => {
     await openAt({ name: 'summary' });
     await user.click(button(/^9 EHBO/));
     expect(screen.getByText('Is er iemand met een EHBO-diploma?')).toBeTruthy();
-    expect(history.state).toEqual({ screen: { name: 'question', id: '9B', returnTo: 'summary' } });
+    expect((history.state as { screen: unknown }).screen).toEqual({ name: 'question', id: '9B', returnTo: 'summary' });
 
     await tick(300);
     await user.click(screen.getByText('Ja'));
@@ -297,6 +297,15 @@ describe('summary', () => {
     await openAt({ name: 'summary' });
     await user.click(summaryButton());
     expect(screen.getByRole('heading', { name: 'Zet je handtekening' })).toBeTruthy();
+  });
+
+  test('the back arrow on the signature screen returns to the summary', async () => {
+    const user = setup();
+    await seed(allJa());
+    await openAt({ name: 'summary' });
+    await user.click(summaryButton());
+    await user.click(button('Vorige'));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy());
   });
 });
 

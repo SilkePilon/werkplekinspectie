@@ -18,6 +18,8 @@ export interface QuestionScreenProps {
   /** Leave this question: the next one, or back to the summary. */
   onNext: () => void;
   /** The X: back to the start screen; the draft stays. */
+  /** One step back in the form; left out on the first question. */
+  onBack?: () => void;
   onClose: () => void;
 }
 
@@ -33,7 +35,7 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
-export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: QuestionScreenProps) {
+export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }: QuestionScreenProps) {
   const index = QUESTION_IDS.indexOf(id);
   const question = QUESTIONS[index];
   const section = SECTIONS.find((s) => s.nr === question?.section);
@@ -93,7 +95,22 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: Questio
 
   return (
     <>
-      <TopBar progress={(index + 1) / QUESTION_IDS.length} label={label} onClose={onClose} />
+      <TopBar
+        progress={(index + 1) / QUESTION_IDS.length}
+        label={label}
+        onBack={
+          onBack &&
+          (() => {
+            // Going back must not be followed by a pending auto-advance from a just-tapped Ja.
+            cancelAdvance();
+            onBack();
+          })
+        }
+        onClose={() => {
+          cancelAdvance();
+          onClose();
+        }}
+      />
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
         <p className="m-0 flex items-center gap-2 text-[15px] font-extrabold text-violet">

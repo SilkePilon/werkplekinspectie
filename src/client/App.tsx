@@ -64,8 +64,37 @@ function screenFromState(state: unknown): Screen {
   }
 }
 
-function pushScreen(screen: Screen) {
-  history.pushState({ screen }, '');
+/** The step before this one in the form. Null on the first question: the X covers that. */
+export function previousScreen(s: Screen): Screen | null {
+  switch (s.name) {
+    case 'question': {
+      if (s.returnTo === 'summary') return { name: 'summary' };
+      const i = QUESTION_IDS.indexOf(s.id);
+      return i > 0 ? { name: 'question', id: QUESTION_IDS[i - 1]! } : null;
+    }
+    case 'goodPractice':
+      return s.returnTo === 'summary'
+        ? { name: 'summary' }
+        : { name: 'question', id: QUESTION_IDS[QUESTION_IDS.length - 1]! };
+    case 'summary':
+      return { name: 'goodPractice' };
+    case 'signature':
+      return { name: 'summary' };
+    default:
+      return null;
+  }
+}
+
+/** Same step of the form; a summary's highlight does not make it another step. */
+function sameStep(a: Screen, b: Screen): boolean {
+  const key = (s: Screen) =>
+    [s.name, 'id' in s ? s.id : '', 'returnTo' in s ? (s.returnTo ?? '') : ''].join('|');
+  return key(a) === key(b);
+}
+
+/** `prev` is the screen this entry was opened from, so the back arrow can reuse history. */
+function pushScreen(screen: Screen, prev: Screen) {
+  history.pushState({ screen, prev }, '');
 }
 
 function useHasLogo(): boolean {
@@ -92,6 +121,11 @@ export function App() {
   const [rememberedName, setName] = useState('');
   const [outbox, setOutbox] = useState<Submission[]>([]);
   const [screen, setScreen] = useState<Screen>(START);
+  const screenRef = useRef<Screen>(START);
+  const show = useCallback((s: Screen) => {
+    screenRef.current = s;
+    setScreen(s);
+  }, []);
   const hasLogo = useHasLogo();
   const backOnline = useBackOnline();
   // Registered once here (App never unmounts); the start screen shows the update banner.
@@ -127,15 +161,35 @@ export function App() {
 
   useEffect(() => {
     history.replaceState({ screen: START }, '');
-    const onPop = (e: PopStateEvent) => setScreen(screenFromState(e.state));
+    const onPop = (e: PopStateEvent) => show(screenFromState(e.state));
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  }, [show]);
 
-  const navigate = useCallback((s: Screen) => {
-    pushScreen(s);
-    setScreen(s);
-  }, []);
+  const navigate = useCallback(
+    (s: Screen) => {
+      pushScreen(s, screenRef.current);
+      show(s);
+    },
+    [show],
+  );
+
+  /**
+   * The back arrow: always the step before in the form, never out of the app. When the
+   * browser's previous entry is that step, go back in history, so the phone's own back button
+   * stays in step; otherwise replace this entry instead of piling up new ones.
+   */
+  const goBack = useCallback(() => {
+    const target = previousScreen(screenRef.current);
+    if (!target) return;
+    const prev: unknown = (history.state as { prev?: unknown } | null)?.prev;
+    if (prev !== undefined && sameStep(screenFromState({ screen: prev }), target)) {
+      history.back();
+    } else {
+      history.replaceState({ screen: target }, '');
+      show(target);
+    }
+  }, [show]);
 
   const commit = useCallback((d: Draft | null) => {
     draftRef.current = d;
@@ -179,8 +233,15 @@ export function App() {
     // Rebuild the trail of earlier questions, so the phone's back button goes to the
     // previous question, as it would have before the app was closed.
     const before = target ? QUESTION_IDS.slice(0, QUESTION_IDS.indexOf(target)) : QUESTION_IDS;
-    for (const id of before) pushScreen({ name: 'question', id });
-    navigate(target ? { name: 'question', id: target } : { name: 'goodPractice' });
+    let prev: Screen = START;
+    for (const id of before) {
+      const s: Screen = { name: 'question', id };
+      pushScreen(s, prev);
+      prev = s;
+    }
+    const s: Screen = target ? { name: 'question', id: target } : { name: 'goodPractice' };
+    pushScreen(s, prev);
+    show(s);
   }
 
   function discard() {
@@ -252,6 +313,7 @@ export function App() {
             id={id}
             dispatch={dispatch}
             onNext={() => advance(id, returnTo)}
+            onBack={previousScreen(screen) ? goBack : undefined}
             onClose={() => navigate(START)}
           />
         );
@@ -263,6 +325,7 @@ export function App() {
             dispatch={dispatch}
             fromSummary={screen.returnTo === 'summary'}
             onNext={() => navigate({ name: 'summary' })}
+            onBack={goBack}
             onClose={() => navigate(START)}
           />
         );
@@ -275,6 +338,7 @@ export function App() {
             onEdit={(id) => navigate({ name: 'question', id, returnTo: 'summary' })}
             onEditGoodPractice={() => navigate({ name: 'goodPractice', returnTo: 'summary' })}
             onNext={() => navigate({ name: 'signature' })}
+            onBack={goBack}
             onClose={() => navigate(START)}
           />
         );
@@ -285,6 +349,7 @@ export function App() {
             dispatch={dispatch}
             onSend={send.sendDraft}
             busy={send.sendingId !== null}
+            onBack={goBack}
             onClose={() => navigate(START)}
           />
         );

@@ -417,6 +417,72 @@ describe('question flow', () => {
     expect(screen.getByRole('button', { name: /Aanpassen/ })).toBeTruthy();
   });
 
+  test('the back arrow goes one question back, keeps the answer, and is not on the first question', async () => {
+    const user = setup();
+    render(<App />);
+    await fillStart(user);
+    await user.click(await screen.findByRole('button', { name: 'Start inspectie' }));
+    expect(screen.queryByRole('button', { name: 'Vorige' })).toBeNull();
+    await settle();
+    await user.click(screen.getByText('Ja'));
+    await tick(300);
+    expect(screen.getByText(Q1B)).toBeTruthy();
+
+    await user.click(button('Vorige'));
+    await waitFor(() => expect(screen.getByText(Q1A)).toBeTruthy());
+    expect(radio('Ja').checked).toBe(true);
+    // The arrow reused the history entry: forward again with Volgende, then the phone's back.
+    await user.click(button('Volgende'));
+    expect(screen.getByText(Q1B)).toBeTruthy();
+    act(() => history.back());
+    await waitFor(() => expect(screen.getByText(Q1A)).toBeTruthy());
+  });
+
+  test('back right after tapping Ja cancels the pending auto-advance', async () => {
+    const user = setup();
+    await seed({ '1A': 'ja' });
+    await resume(user);
+    expect(screen.getByText(Q1B)).toBeTruthy();
+    await user.click(screen.getByText('Ja'));
+    await user.click(button('Vorige'));
+    await tick(400);
+    expect(screen.getByText(Q1A)).toBeTruthy();
+  });
+
+  test('after resuming, back walks the earlier questions without leaving the app', async () => {
+    const user = setup();
+    await seed({ '1A': 'ja', '1B': 'nvt' });
+    await resume(user);
+    expect(screen.getByText(Q1C)).toBeTruthy();
+    await user.click(button('Vorige'));
+    await waitFor(() => expect(screen.getByText(Q1B)).toBeTruthy());
+    await user.click(button('Vorige'));
+    await waitFor(() => expect(screen.getByText(Q1A)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Vorige' })).toBeNull();
+  });
+
+  test('back from the summary and from a question opened from it', async () => {
+    const user = setup();
+    await seed(allJaExcept());
+    render(<App />);
+    await screen.findByText('Je bent nog bezig met een inspectie');
+    // Opened straight from the address bar's history: no matching previous entry.
+    const state = { screen: { name: 'summary' } };
+    act(() => {
+      history.pushState(state, '');
+      dispatchEvent(new PopStateEvent('popstate', { state }));
+    });
+    await user.click(screen.getByRole('button', { name: /^4 Brandpreventie/ }));
+    expect(screen.getByText('Zijn er blusmiddelen, en kun je erbij?')).toBeTruthy();
+    await user.click(button('Vorige'));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy());
+
+    await user.click(button('Vorige'));
+    await waitFor(() => expect(screen.getByRole('heading', { name: /Wat gaat hier goed/ })).toBeTruthy());
+    await user.click(button('Vorige'));
+    await waitFor(() => expect(screen.getByText(Q9B)).toBeTruthy());
+  });
+
   test('autosave is flushed at once when the page is hidden', async () => {
     const user = setup();
     await seed({});

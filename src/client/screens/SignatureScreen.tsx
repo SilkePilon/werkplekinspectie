@@ -13,12 +13,14 @@ export interface SignatureScreenProps {
   onSend: (signature: string, signedAt: string) => void;
   /** Sending is running: the button shows a spinner and takes no taps. */
   busy: boolean;
+  /** One step back in the form (the arrow at the top). */
+  onBack?: () => void;
   onClose: () => void;
 }
 
 const DECLARATION = 'Ik heb deze inspectie zelf gedaan en de antwoorden kloppen.';
 
-export function SignatureScreen({ draft, dispatch, onSend, busy, onClose }: SignatureScreenProps) {
+export function SignatureScreen({ draft, dispatch, onSend, busy, onBack, onClose }: SignatureScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { isEmpty, clear, exportPng } = useSignaturePad(canvasRef);
   const [tooBig, setTooBig] = useState(false);
@@ -40,7 +42,7 @@ export function SignatureScreen({ draft, dispatch, onSend, busy, onClose }: Sign
 
   return (
     <>
-      <TopBar progress={1} label="Laatste stap" onClose={onClose} />
+      <TopBar progress={1} label="Laatste stap" onBack={onBack} onClose={onClose} />
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
         <h1 className="mt-2.5 mb-4 text-[25px] font-black leading-[1.2] tracking-[-.005em]">Zet je handtekening</h1>

@@ -17,6 +17,8 @@ export interface SummaryScreenProps {
   tooLarge?: boolean;
   /** "Alles klopt, naar tekenen". */
   onNext: () => void;
+  /** One step back in the form (the arrow at the top). */
+  onBack?: () => void;
   onClose: () => void;
 }
 
@@ -54,6 +56,7 @@ export function SummaryScreen({
   highlight,
   tooLarge = false,
   onNext,
+  onBack,
   onClose,
 }: SummaryScreenProps) {
   const ids = { nee: useId(), notes: useId(), all: useId(), why: useId() };
@@ -72,7 +75,7 @@ export function SummaryScreen({
 
   return (
     <>
-      <TopBar progress={0.95} label="Bijna klaar" onClose={onClose} />
+      <TopBar progress={0.95} label="Bijna klaar" onBack={onBack} onClose={onClose} />
 
       <main className="flex flex-1 flex-col px-[18px] pt-1">
         <h1 className="mt-2 mb-1 text-[26px] font-black leading-[1.15]">Klopt alles?</h1>

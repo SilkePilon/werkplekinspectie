@@ -12,18 +12,27 @@ export interface GoodPracticeScreenProps {
   fromSummary: boolean;
   /** On to the summary. */
   onNext: () => void;
+  /** One step back in the form (the arrow at the top). */
+  onBack?: () => void;
   onClose: () => void;
 }
 
 const QUESTION = 'Wat gaat hier goed? Waar kan de rest van het bedrijf van leren?';
 
 /** The open question of the paper form, after the 21 questions. */
-export function GoodPracticeScreen({ draft, dispatch, fromSummary, onNext, onClose }: GoodPracticeScreenProps) {
+export function GoodPracticeScreen({
+  draft,
+  dispatch,
+  fromSummary,
+  onNext,
+  onBack,
+  onClose,
+}: GoodPracticeScreenProps) {
   const ids = { question: useId(), hint: useId() };
 
   return (
     <>
-      <TopBar progress={0.9} label="Bijna klaar" onClose={onClose} />
+      <TopBar progress={0.9} label="Bijna klaar" onBack={onBack} onClose={onClose} />
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
         {!fromSummary && (
