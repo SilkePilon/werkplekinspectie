@@ -86,8 +86,11 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
 
   /** POSTs a stored submission as it is, and shows the result. */
   const post = useCallback(
-    async (sub: Submission) => {
+    /** `alongside`: work that runs during the upload and must be done before the result shows. */
+    async (sub: Submission, alongside: Promise<unknown> = Promise.resolve()) => {
       const { outcome, fields } = await submitInspection(sub);
+      // The result screen only shows once all is done, so its buttons work straight away.
+      await alongside;
       if (outcome === 'verzonden') await dropFromOutbox(sub.submissionId);
       setLast({ submission: sub, outcome, fields });
       navigate({ name: 'result', outcome, submissionId: sub.submissionId });
@@ -142,9 +145,7 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
             // The outbox has it now, so clearing the draft runs alongside the upload instead of
             // before it. If clearing fails, the leftover draft has the same submissionId; the
             // server mails an id once.
-            const cleared = clearDraft().catch(() => undefined);
-            await post(sub);
-            await cleared;
+            await post(sub, clearDraft().catch(() => undefined));
             if (draftRef.current?.id === sub.submissionId) commit(null);
           } catch (err) {
             // Not expected. Until the outbox has it, the draft is the only copy: keep saving it.

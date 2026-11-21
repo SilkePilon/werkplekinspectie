@@ -139,6 +139,22 @@ describe('POST /api/inspecties', () => {
     expect(renderPdf).toHaveBeenCalledWith(expect.anything(), cfg.branding, SVG_LOGO, 'svg');
   });
 
+  test('an SVG logo goes into the mail as an inline PNG, shown by cid', async () => {
+    const { app, mailer } = await setup({ logo: { data: SVG_LOGO, kind: 'svg' } });
+    await post(app, makeSubmission());
+    const msg = mailer.sent[0]!;
+    const logo = msg.attachments.find((a) => a.cid !== undefined);
+    expect(logo).toMatchObject({ filename: 'logo.png', contentType: 'image/png', contentDisposition: 'inline' });
+    expect(logo!.content.subarray(1, 4).toString('latin1')).toBe('PNG');
+    expect(msg.html).toContain(`src="cid:${logo!.cid}"`);
+  });
+
+  test('without a logo the mail has only the PDF', async () => {
+    const { app, mailer } = await setup();
+    await post(app, makeSubmission());
+    expect(mailer.sent[0]!.attachments.map((a) => a.contentType)).toEqual(['application/pdf']);
+  });
+
   test('an invalid body gives 400 with the zod paths and sends nothing', async () => {
     const { app, mailer, renderPdf } = await setup();
 

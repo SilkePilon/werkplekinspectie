@@ -17,6 +17,7 @@ import type { z } from 'zod';
 import type { Config } from './config.js';
 import { InvalidImageError, checkPng, decodeDataUrl, imageSize } from './images.js';
 import { buildMail } from './mail/build.js';
+import { mailLogo } from './mail/logo.js';
 import type { Mailer } from './mail/send.js';
 import { renderInspectionPdf } from './pdf/render.js';
 import {
@@ -213,6 +214,8 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
   // Sends that are still running, so a double tap waits for the first instead of mailing twice.
   const inFlight = new Map<string, Promise<void>>();
   const submitGate = createConcurrencyGate(MAX_CONCURRENT_SUBMITS);
+  // Rendered once: every mail carries the same logo PNG.
+  const logoForMail = deps.logo === undefined ? undefined : await mailLogo(deps.logo);
   const slots = new WeakMap<FastifyRequest, SubmitSlot>();
 
   const app = Fastify({
@@ -273,7 +276,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
 
   async function deliver(sub: Submission): Promise<void> {
     const pdf = await renderPdf(sub, cfg.branding, deps.logo?.data, deps.logo?.kind);
-    const msg = buildMail(sub, pdf, cfg);
+    const msg = buildMail(sub, pdf, cfg, logoForMail);
     try {
       await deps.mailer.send(msg);
     } catch (err) {
