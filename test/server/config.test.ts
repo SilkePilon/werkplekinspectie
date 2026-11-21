@@ -68,6 +68,7 @@ describe('loadConfig', () => {
         orgAddress: ['Voorbeeldstraat 1', '1234 AB Voorbeeldstad'],
         department: 'Customer Care',
         vgmName: 'J. Jansen',
+        iconBackground: '#FFFFFF',
         logoFile: '/config/logo.svg',
       },
       rateLimit: { perIp: 7, window: 600_000, globalPerHour: 30 },
@@ -91,7 +92,13 @@ describe('loadConfig', () => {
           pass: SECRET,
         },
       },
-      branding: { orgName: '', orgAddress: [], department: 'Customer Care', vgmName: '' },
+      branding: {
+        orgName: '',
+        orgAddress: [],
+        department: 'Customer Care',
+        vgmName: '',
+        iconBackground: '#FFFFFF',
+      },
       rateLimit: { perIp: 5, window: 900_000, globalPerHour: 20 },
     } satisfies Config);
   });
@@ -260,11 +267,31 @@ describe('loadConfig', () => {
       ORG_DEPARTMENT: '',
       RATE_LIMIT_WINDOW: '',
       BRAND_LOGO_FILE: '',
+      BRAND_ICON_FILE: '',
+      BRAND_ICON_BACKGROUND: '',
     });
     expect(config.port).toBe(8080);
     expect(config.mail.smtp.port).toBe(465);
     expect(config.branding.department).toBe('Customer Care');
     expect(config.branding.logoFile).toBeUndefined();
+    expect(config.branding.iconFile).toBeUndefined();
+    expect(config.branding.iconBackground).toBe('#FFFFFF');
     expect(config.rateLimit.window).toBe(900_000);
+  });
+
+  test('reads the app icon file and its background colour', () => {
+    const config = loadConfig({
+      ...minimalEnv(),
+      BRAND_ICON_FILE: ' /config/icon.svg ',
+      BRAND_ICON_BACKGROUND: '#ff5800',
+    });
+    expect(config.branding.iconFile).toBe('/config/icon.svg');
+    expect(config.branding.iconBackground).toBe('#ff5800');
+  });
+
+  test.each(['white', '#FFF', '#GGGGGG', '#FFFFFF80'])('refuses BRAND_ICON_BACKGROUND %j', (value) => {
+    expect(() => loadConfig({ ...minimalEnv(), BRAND_ICON_BACKGROUND: value })).toThrow(
+      'BRAND_ICON_BACKGROUND: moet een kleur zijn als #FFFFFF',
+    );
   });
 });

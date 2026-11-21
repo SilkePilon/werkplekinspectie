@@ -33,10 +33,30 @@ function readLogo(file: string): NonNullable<AppDeps['logo']> {
   return { data, kind: 'png' };
 }
 
+/**
+ * A configured but unreadable app icon stops startup, like the logo. The renderer (a native
+ * module) is only loaded when an icon is configured.
+ */
+async function readIcons(file: string): Promise<NonNullable<AppDeps['icons']>> {
+  let data: Buffer;
+  try {
+    data = readFileSync(file);
+  } catch {
+    fail(`BRAND_ICON_FILE: kan ${file} niet lezen`);
+  }
+  const { renderIcons } = await import('./icons.js');
+  try {
+    return renderIcons(data, cfg.branding.iconBackground);
+  } catch {
+    fail(`BRAND_ICON_FILE: ${file} is geen bruikbare SVG`);
+  }
+}
+
 const cfg = readConfig();
 const logo = cfg.branding.logoFile === undefined ? undefined : readLogo(cfg.branding.logoFile);
+const icons = cfg.branding.iconFile === undefined ? undefined : await readIcons(cfg.branding.iconFile);
 const mailer = createMailer(cfg.mail);
-const app = await buildApp(cfg, { mailer, logo, logStream: process.stdout });
+const app = await buildApp(cfg, { mailer, logo, icons, logStream: process.stdout });
 
 // Only the outcome is logged; a failed check does not stop the server.
 void mailer.verify().then((ok) => {

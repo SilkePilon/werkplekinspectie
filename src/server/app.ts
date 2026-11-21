@@ -29,6 +29,7 @@ import {
   requireJson,
   securityHeaders,
 } from './security.js';
+import type { IconFile } from './icons.js';
 import { QUESTION_IDS } from '../shared/questions.js';
 import { LIMITS, submissionSchema, type Submission } from '../shared/schema.js';
 
@@ -37,6 +38,8 @@ export interface AppDeps {
   renderPdf?: typeof renderInspectionPdf;
   now?: () => Date;
   logo?: { data: Buffer; kind: 'svg' | 'png' };
+  /** App icons from config, by path; they take the place of the built-in files. */
+  icons?: Map<string, IconFile>;
   /** Directory with the built client. Default: dist/client next to the compiled server. */
   staticRoot?: string;
   /** Where JSON logs go. Without it, logging is off (tests). */
@@ -325,6 +328,18 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
     if (deps.logo === undefined) return reply.code(404).send(NOT_FOUND);
     return reply.type(LOGO_TYPES[deps.logo.kind]).send(deps.logo.data);
   });
+
+  // Configured icons win over the built-in ones: a hook, because @fastify/static already has a
+  // route for each built file. Revalidated, so a new icon shows up soon.
+  const icons = deps.icons;
+  if (icons !== undefined && icons.size > 0) {
+    app.addHook('onRequest', async (req, reply) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return;
+      const file = icons.get(pathOf(req.url));
+      if (file === undefined) return;
+      return reply.header('cache-control', 'no-cache').type(file.type).send(file.body);
+    });
+  }
 
   await app.register(fastifyStatic, {
     root: deps.staticRoot ?? DEFAULT_STATIC_ROOT,

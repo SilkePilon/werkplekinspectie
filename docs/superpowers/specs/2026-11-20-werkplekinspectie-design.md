@@ -231,6 +231,8 @@ pdfkit, **liggend A4**, nagebouwd naar het Word-formulier:
 | `ORG_DEPARTMENT` | Customer Care | "Origineel: Afdeling" |
 | `VGM_NAME` | J. Jansen | Naam VGM-functionaris op de PDF |
 | `BRAND_LOGO_FILE` | /config/logo.svg | Pad naar gemount logo (SVG of PNG), optioneel |
+| `BRAND_ICON_FILE` | /config/icon.svg | Pad naar gemount app-icoon (vierkante SVG), optioneel; vervangt de ingebouwde iconen |
+| `BRAND_ICON_BACKGROUND` | #FFFFFF | Kleur rond het icoon voor maskable en Apple, optioneel |
 | `PORT` | 8080 | Luisterpoort |
 | `PUBLIC_ORIGIN` | https://inspectie.example.com | Publieke URL; inzendingen van een andere herkomst worden geweigerd |
 | `TRUST_PROXY` | IP/CIDR van cloudflared | Welke proxy vertrouwd wordt voor client-IP |

@@ -414,6 +414,25 @@ describe('other routes', () => {
     expect(res.rawPayload.equals(data)).toBe(true);
   });
 
+  test('configured icons replace the built-in ones, revalidated on every use', async () => {
+    writeFileSync(join(staticRoot, 'built-in.png'), 'built-in');
+    // The build has a file at the same path: that must not clash, the configured one wins.
+    mkdirSync(join(staticRoot, 'icons'), { recursive: true });
+    writeFileSync(join(staticRoot, 'icons', 'pwa-192x192.png'), 'built-in icon');
+    const body = Buffer.from('configured');
+    const icons = new Map([['/icons/pwa-192x192.png', { type: 'image/png', body }]]);
+    const { app } = await setup({ icons });
+    // The service worker precaches with a revision query; the route must still match.
+    const res = await app.inject({ method: 'GET', url: '/icons/pwa-192x192.png?__WB_REVISION__=abc' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+    expect(res.headers['cache-control']).toBe('no-cache');
+    expect(res.rawPayload.equals(body)).toBe(true);
+    // Files without a configured icon still come from the build.
+    const other = await app.inject({ method: 'GET', url: '/built-in.png' });
+    expect(other.body).toBe('built-in');
+  });
+
   test('GET /some/route serves index.html from staticRoot, uncached', async () => {
     const { app } = await setup();
     const res = await app.inject({ method: 'GET', url: '/some/route', headers: { accept: 'text/html' } });

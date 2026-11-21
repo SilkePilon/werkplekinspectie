@@ -12,12 +12,14 @@ const BRANDING: Config['branding'] = {
   orgAddress: ['Voorbeeldstraat 1', '1234 AB Voorbeeld', 'www.example.com'],
   department: 'Customer Care',
   vgmName: 'M. Jansen',
+  iconBackground: '#FFFFFF',
 };
 const EMPTY_BRANDING: Config['branding'] = {
   orgName: '',
   orgAddress: [],
   department: '',
   vgmName: '',
+  iconBackground: '#FFFFFF',
 };
 
 const FOOTER_LINE = 'Digitaal ingevuld en ondertekend via de Werkplekinspectie-app op 20-11-2026 09:42';

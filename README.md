@@ -79,6 +79,8 @@ in [`.env.example`](.env.example).
 | `ORG_DEPARTMENT` | nee | `Customer Care` (standaard) | Afdeling op de PDF |
 | `VGM_NAME` | nee | `J. Jansen` | Naam van de VGM-functionaris op de PDF |
 | `BRAND_LOGO_FILE` | nee | `/config/logo.svg` | Pad naar een gemount logo (SVG of PNG). Leeg = geen logo. Staat het ingesteld maar is het bestand er niet, dan start de container niet |
+| `BRAND_ICON_FILE` | nee | `/config/icon.svg` | Pad naar een gemount, vierkant app-icoon (SVG). De server maakt er bij het starten alle icoonbestanden van en gebruikt die in plaats van het neutrale icoon. Leeg = het neutrale icoon. Onleesbaar bestand = de container start niet |
+| `BRAND_ICON_BACKGROUND` | nee | `#FFFFFF` | Kleur rond het icoon waar het de hele tegel moet vullen (Android "maskable", iPhone). Kies de achtergrondkleur van het icoon zelf |
 | `PORT` | nee | `8080` (standaard) | Poort waarop de server luistert |
 | `PUBLIC_ORIGIN` | ja | `https://inspectie.example.com` | Publieke URL, alleen schema en host. Inzendingen van een andere herkomst worden geweigerd. Met `NODE_ENV=production` moet dit `https://` zijn |
 | `TRUST_PROXY` | nee | `10.42.0.0/16` | Kommalijst van IP's of CIDR-blokken van de proxy (cloudflared) waarvan de header `CF-Connecting-IP` vertrouwd wordt. Zie [Cloudflare Tunnel](#cloudflare-tunnel) |
@@ -105,6 +107,7 @@ Pas `.env` aan voor lokaal gebruik:
 NODE_ENV=development
 PUBLIC_ORIGIN=http://localhost:5173
 BRAND_LOGO_FILE=
+BRAND_ICON_FILE=
 ```
 
 Met de nepwaarden voor SMTP start de server gewoon (de log meldt `smtp_verify_failed`), maar versturen mislukt.
@@ -200,6 +203,11 @@ kubectl -n werkplekinspectie create configmap werkplekinspectie-branding --from-
 Het logo komt dan op `/config/logo.svg` in de container. Gebruik je een PNG, maak de ConfigMap dan met
 `--from-file=logo.png` en zet `BRAND_LOGO_FILE=/config/logo.png`. Geen logo? Haal `BRAND_LOGO_FILE` uit de
 ConfigMap.
+
+Een eigen app-icoon (optioneel) gaat op dezelfde manier: voeg `--from-file=icon.svg` toe aan die ConfigMap en
+zet `BRAND_ICON_FILE=/config/icon.svg`. Gebruik een vierkante SVG (bijv. `viewBox="0 0 512 512"`) met het
+beeldmerk binnen de middelste 80%, zodat Android het in een cirkel kan bijsnijden. Telefoons die de app al
+hebben, tonen het nieuwe icoon pas na opnieuw installeren.
 
 **5. Deployment en Service**
 

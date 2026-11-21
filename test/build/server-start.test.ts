@@ -120,7 +120,7 @@ test('/ serves the built app shell', async () => {
 test('the built PDF renderer finds its embedded fonts', async () => {
   const built = pathToFileURL(join(ROOT, 'dist/server/server/pdf/render.js')).href;
   const { renderInspectionPdf: render } = (await import(built)) as { renderInspectionPdf: typeof renderInspectionPdf };
-  const branding = { orgName: 'Voorbeeld B.V.', orgAddress: [], department: '', vgmName: '' };
+  const branding = { orgName: 'Voorbeeld B.V.', orgAddress: [], department: '', vgmName: '', iconBackground: '#FFFFFF' };
   const pdf = await render(makeSubmission({ monteur: 'Łukasz Wiśniewski' }), branding);
   expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
   expect(pdf.toString('latin1')).toContain('/FontFile2');

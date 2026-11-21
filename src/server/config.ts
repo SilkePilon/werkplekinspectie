@@ -19,6 +19,10 @@ export interface Config {
     department: string;
     vgmName: string;
     logoFile?: string;
+    /** A square SVG for the app icon; replaces the built-in icons when set. */
+    iconFile?: string;
+    /** #RRGGBB behind the icon where it must fill the whole tile (maskable, Apple). */
+    iconBackground: string;
   };
   /** `window` is in milliseconds. */
   rateLimit: { perIp: number; window: number; globalPerHour: number };
@@ -150,6 +154,15 @@ function envSchema(production: boolean) {
       ORG_DEPARTMENT: textVar('Customer Care'),
       VGM_NAME: textVar(''),
       BRAND_LOGO_FILE: z.preprocess(blankToUndefined, z.string().trim().optional()),
+      BRAND_ICON_FILE: z.preprocess(blankToUndefined, z.string().trim().optional()),
+      BRAND_ICON_BACKGROUND: z.preprocess(
+        blankToUndefined,
+        z
+          .string()
+          .trim()
+          .regex(/^#[0-9a-fA-F]{6}$/, 'moet een kleur zijn als #FFFFFF')
+          .default('#FFFFFF'),
+      ),
 
       PORT: intVar(DEFAULT_PORT, 1, 65535),
       PUBLIC_ORIGIN: publicOrigin(production),
@@ -207,6 +220,8 @@ function envSchema(production: boolean) {
           department: e.ORG_DEPARTMENT,
           vgmName: e.VGM_NAME,
           ...(e.BRAND_LOGO_FILE === undefined ? {} : { logoFile: e.BRAND_LOGO_FILE }),
+          ...(e.BRAND_ICON_FILE === undefined ? {} : { iconFile: e.BRAND_ICON_FILE }),
+          iconBackground: e.BRAND_ICON_BACKGROUND,
         },
         rateLimit: {
           perIp: e.RATE_LIMIT_PER_IP,

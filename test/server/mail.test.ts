@@ -31,7 +31,13 @@ const CONFIG: Config = {
     from: 'Werkplekinspectie <inspectie@example.com>',
     smtp: { host: 'smtp.example.com', port: 465, secure: true, user: 'resend', pass: SECRET },
   },
-  branding: { orgName: 'Voorbeeld B.V.', orgAddress: [], department: 'Customer Care', vgmName: '' },
+  branding: {
+    orgName: 'Voorbeeld B.V.',
+    orgAddress: [],
+    department: 'Customer Care',
+    vgmName: '',
+    iconBackground: '#FFFFFF',
+  },
   rateLimit: { perIp: 5, window: 900_000, globalPerHour: 20 },
 };
 
