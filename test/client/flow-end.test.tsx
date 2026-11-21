@@ -171,7 +171,11 @@ describe('good practice', () => {
     await seed(allJa());
     await openAt({ name: 'goodPractice' });
     const text = screen.getByRole('textbox', { name: GOOD }) as HTMLTextAreaElement;
-    expect(text.maxLength).toBe(2000);
+    expect(text.maxLength).toBe(250);
+    expect(screen.queryByText(/tekens over/)).toBeNull();
+    fireEvent.change(text, { target: { value: 'x'.repeat(170) } });
+    expect(screen.getByText('Nog 80 tekens over.')).toBeTruthy();
+    fireEvent.change(text, { target: { value: '' } });
     await user.type(text, 'Elke ochtend een toolbox.');
     await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();

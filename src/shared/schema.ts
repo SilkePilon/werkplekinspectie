@@ -4,12 +4,15 @@ import { z } from 'zod';
 import { amsterdamDateKey } from './dates.js';
 import { QUESTION_IDS, type QuestionId } from './questions.js';
 
+/** Every text field: at most 250 characters, on the phone and on the server. */
+const TEXT_MAX = 250;
+
 export const LIMITS = {
-  monteur: 80,
-  project: 120,
-  projectnummer: 40,
-  comment: 1000,
-  goodPractice: 2000,
+  monteur: TEXT_MAX,
+  project: TEXT_MAX,
+  projectnummer: TEXT_MAX,
+  comment: TEXT_MAX,
+  goodPractice: TEXT_MAX,
   photosPerItem: 3,
   photosTotal: 15,
   photoBytes: 1_500_000,

@@ -18,6 +18,8 @@ export interface GoodPracticeScreenProps {
 }
 
 const QUESTION = 'Wat gaat hier goed? Waar kan de rest van het bedrijf van leren?';
+/** Shown once fewer than this many characters are left, like in the sheets. */
+const COUNT_FROM = 100;
 
 /** The open question of the paper form, after the 21 questions. */
 export function GoodPracticeScreen({
@@ -28,7 +30,8 @@ export function GoodPracticeScreen({
   onBack,
   onClose,
 }: GoodPracticeScreenProps) {
-  const ids = { question: useId(), hint: useId() };
+  const ids = { question: useId(), hint: useId(), count: useId() };
+  const left = LIMITS.goodPractice - draft.goodPractice.length;
 
   return (
     <>
@@ -48,7 +51,7 @@ export function GoodPracticeScreen({
         </h1>
         <textarea
           aria-labelledby={ids.question}
-          aria-describedby={ids.hint}
+          aria-describedby={left <= COUNT_FROM ? `${ids.hint} ${ids.count}` : ids.hint}
           value={draft.goodPractice}
           maxLength={LIMITS.goodPractice}
           rows={6}
@@ -62,6 +65,11 @@ export function GoodPracticeScreen({
         <p id={ids.hint} className="mx-0.5 mt-2.5 mb-0 text-[15px] text-sub">
           Mag kort. Je mag dit ook overslaan.
         </p>
+        {left <= COUNT_FROM && (
+          <p id={ids.count} aria-live="polite" className="mx-0.5 mt-1.5 mb-0 text-[15px] text-sub">
+            Nog {left} tekens over.
+          </p>
+        )}
       </main>
 
       {/* Sticky above the keyboard, so Volgende is in sight while typing. */}

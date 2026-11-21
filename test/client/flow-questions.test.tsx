@@ -303,14 +303,14 @@ describe('question flow', () => {
     await user.click(screen.getByText('Nee'));
     const dialog = neeDialog();
     const comment = within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }) as HTMLTextAreaElement;
-    expect(comment.maxLength).toBe(1000);
+    expect(comment.maxLength).toBe(250);
     fireEvent.change(comment, { target: { value: '   ' } });
     fireEvent.change(within(dialog).getByLabelText('Opgelost vóór'), { target: { value: FUTURE } });
     await user.click(button('Doorgaan', dialog));
     expect(within(dialog).getByText('Schrijf kort op wat er mis is.')).toBeTruthy();
     expect(within(dialog).queryByText(/tekens over/)).toBeNull();
 
-    fireEvent.change(comment, { target: { value: 'x'.repeat(950) } });
+    fireEvent.change(comment, { target: { value: 'x'.repeat(200) } });
     expect(within(dialog).getByText('Nog 50 tekens over.')).toBeTruthy();
   });
 
@@ -647,9 +647,10 @@ describe('start screen', () => {
     await user.click(button('Naam aanpassen'));
     const naam = screen.getByLabelText('Naam') as HTMLInputElement;
     expect(naam.value).toBe('J. Jansen');
-    expect(naam.maxLength).toBe(80);
-    expect((screen.getByLabelText('Project') as HTMLInputElement).maxLength).toBe(120);
-    expect((screen.getByLabelText('Projectnummer') as HTMLInputElement).maxLength).toBe(40);
+    // Every text field stops at 250 characters.
+    expect(naam.maxLength).toBe(250);
+    expect((screen.getByLabelText('Project') as HTMLInputElement).maxLength).toBe(250);
+    expect((screen.getByLabelText('Projectnummer') as HTMLInputElement).maxLength).toBe(250);
     await user.clear(naam);
     await user.type(naam, 'A. de Vries');
     await user.type(screen.getByLabelText('Project'), 'Voorbeeld B.V.');

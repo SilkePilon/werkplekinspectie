@@ -390,7 +390,7 @@ describe('notes on Ja and Nvt', () => {
 
   test('caps a note at the comment limit', () => {
     const d = apply(complete(), { type: 'note', id: '1A', text: 'x'.repeat(1200) });
-    expect(d.notes?.['1A']).toHaveLength(1000);
+    expect(d.notes?.['1A']).toHaveLength(250);
   });
 
   test('a note written before Nee becomes the Nee comment, but never overwrites one', () => {

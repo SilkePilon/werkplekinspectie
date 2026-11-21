@@ -208,7 +208,7 @@ pdfkit, **liggend A4**, nagebouwd naar het Word-formulier:
   (configureerbaar via env). Advies in README: daarnaast één Cloudflare rate-limitregel op `/api/`.
 - **Honeypot:** verborgen veld; ingevuld → nep-200, niets versturen.
 - **Validatie:** zod, strikt: precies de 21 bekende id's, antwoord ∈ {ja, nee, nvt}, bij Nee opmerking +
-  datum verplicht, maximale lengtes op alle tekst, handtekening verplicht en niet leeg, foto's alleen
+  datum verplicht, maximaal 250 tekens per tekstveld, handtekening verplicht en niet leeg, foto's alleen
   JPEG/PNG (magic bytes gecontroleerd), aantallen en groottes begrensd. Server rekent niets na op basis van
   vertrouwen in de client.
 - **Limieten:** body-limiet op de route (bijv. 12 MB) en per bestand.
