@@ -1,10 +1,10 @@
 // Composes the notification mail: fixed sender and recipient from config, a
 // sanitised subject, a short summary (plain text and HTML) and the PDF attached.
-import type { Config } from "../config.js";
-import { pdfFileName } from "../pdf/render.js";
-import { formatDate, formatDay } from "../../shared/dates.js";
-import { FORM_TITLE, QUESTIONS } from "../../shared/questions.js";
-import type { Submission } from "../../shared/schema.js";
+import type { Config } from '../config.js';
+import { pdfFileName } from '../pdf/render.js';
+import { formatDate, formatDay } from '../../shared/dates.js';
+import { FORM_TITLE, QUESTIONS } from '../../shared/questions.js';
+import type { Submission } from '../../shared/schema.js';
 
 export interface MailMessage {
   from: string;
@@ -12,32 +12,28 @@ export interface MailMessage {
   subject: string;
   text: string;
   html: string;
-  attachments: {
-    filename: string;
-    content: Buffer;
-    contentType: "application/pdf";
-  }[];
+  attachments: { filename: string; content: Buffer; contentType: 'application/pdf' }[];
 }
 
 const SUBJECT_MAX = 200;
-const NO_NEE = "Geen Nee-punten.";
-const ATTACHMENT_NOTE = "De volledige inspectie staat in de bijlage (PDF).";
+const NO_NEE = 'Geen Nee-punten.';
+const ATTACHMENT_NOTE = 'De volledige inspectie staat in de bijlage (PDF).';
 
 /** Escapes text for use in HTML element content and attribute values. */
 export function escapeHtml(s: string): string {
   return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** One line, at most SUBJECT_MAX characters (code points, so no split surrogate pairs). */
 function subjectLine(s: string): string {
-  return Array.from(s.replace(/[\r\n]+/g, " "))
+  return Array.from(s.replace(/[\r\n]+/g, ' '))
     .slice(0, SUBJECT_MAX)
-    .join("");
+    .join('');
 }
 
 interface Summary {
@@ -47,19 +43,20 @@ interface Summary {
   counts: { ja: number; nee: number; nvt: number };
   facts: [label: string, value: string][];
   nee: { heading: string; comment: string; due: string; photos: string }[];
+  /** Comments on Ja/Nvt answers, in question order. */
+  notes: { heading: string; answer: string; comment: string }[];
   goodPractice: string;
 }
 
 function photoCount(n: number): string {
-  if (n === 0) return "";
-  return n === 1 ? "1 foto" : `${n} foto's`;
+  if (n === 0) return '';
+  return n === 1 ? '1 foto' : `${n} foto's`;
 }
 
 function summarise(sub: Submission): Summary {
   const answers = QUESTIONS.map((q) => ({ q, a: sub.answers[q.id] }));
-  const count = (kind: "ja" | "nee" | "nvt") =>
-    answers.filter(({ a }) => a.answer === kind).length;
-  const counts = { ja: count("ja"), nee: count("nee"), nvt: count("nvt") };
+  const count = (kind: 'ja' | 'nee' | 'nvt') => answers.filter(({ a }) => a.answer === kind).length;
+  const counts = { ja: count('ja'), nee: count('nee'), nvt: count('nvt') };
   const date = formatDate(sub.startedAt);
   return {
     project: sub.project,
@@ -67,16 +64,13 @@ function summarise(sub: Submission): Summary {
     date,
     counts,
     facts: [
-      ["Monteur", sub.monteur],
-      ["Project", `${sub.project} (${sub.projectnummer})`],
-      ["Datum", date],
-      [
-        "Resultaat",
-        `${counts.ja} × Ja, ${counts.nee} × Nee, ${counts.nvt} × Nvt`,
-      ],
+      ['Monteur', sub.monteur],
+      ['Project', `${sub.project} (${sub.projectnummer})`],
+      ['Datum', date],
+      ['Resultaat', `${counts.ja} × Ja, ${counts.nee} × Nee, ${counts.nvt} × Nvt`],
     ],
     nee: answers.flatMap(({ q, a }) =>
-      a.answer === "nee"
+      a.answer === 'nee'
         ? [
             {
               heading: `${q.id} ${q.appText}`,
@@ -87,48 +81,47 @@ function summarise(sub: Submission): Summary {
           ]
         : [],
     ),
+    notes: answers.flatMap(({ q, a }) => {
+      if (a.answer === 'nee') return [];
+      const comment = (a.comment ?? '').trim();
+      return comment === ''
+        ? []
+        : [{ heading: `${q.id} ${q.appText}`, answer: a.answer === 'ja' ? 'Ja' : 'Nvt', comment }];
+    }),
     goodPractice: sub.goodPractice.trim(),
   };
 }
 
 function renderText(s: Summary): string {
-  const lines = [
-    FORM_TITLE,
-    "",
-    ...s.facts.map(([label, value]) => `${label}: ${value}`),
-    "",
-    "Nee-punten:",
-  ];
+  const lines = [FORM_TITLE, '', ...s.facts.map(([label, value]) => `${label}: ${value}`), '', 'Nee-punten:'];
   if (s.nee.length === 0) lines.push(NO_NEE);
   for (const item of s.nee) {
-    lines.push(
-      "",
-      item.heading,
-      item.comment,
-      item.photos === "" ? item.due : `${item.due} (${item.photos})`,
-    );
+    lines.push('', item.heading, item.comment, item.photos === '' ? item.due : `${item.due} (${item.photos})`);
   }
-  if (s.goodPractice !== "")
-    lines.push("", "Wat gaat hier goed:", s.goodPractice);
-  lines.push("", ATTACHMENT_NOTE);
-  return `${lines.join("\n")}\n`;
+  if (s.notes.length > 0) {
+    lines.push('', 'Opmerkingen:');
+    for (const note of s.notes) lines.push('', `${note.heading} (${note.answer})`, note.comment);
+  }
+  if (s.goodPractice !== '') lines.push('', 'Wat gaat hier goed:', s.goodPractice);
+  lines.push('', ATTACHMENT_NOTE);
+  return `${lines.join('\n')}\n`;
 }
 
 // The app's theme (src/client/styles.css), rebuilt for mail clients: tables and inline styles
 // only, so Outlook's Word renderer keeps the layout. Rounded corners simply drop out there.
 // No web font and no images: nothing is fetched when the mail is opened.
 const C = {
-  ink: "#26193C",
-  violet: "#431961",
-  lila: "#EFE9F7",
-  coral: "#F34842",
-  coralD: "#C42B24",
-  roze: "#FDECEB",
-  grey: "#E5E5E5",
-  sub: "#5F5670",
+  ink: '#26193C',
+  violet: '#431961',
+  lila: '#EFE9F7',
+  coral: '#F34842',
+  coralD: '#C42B24',
+  roze: '#FDECEB',
+  grey: '#E5E5E5',
+  sub: '#5F5670',
 } as const;
 const FONT = `'Nunito','Segoe UI',Roboto,Helvetica,Arial,sans-serif`;
-const BOX = "border-collapse:separate;mso-table-lspace:0;mso-table-rspace:0";
+const BOX = 'border-collapse:separate;mso-table-lspace:0;mso-table-rspace:0';
 const CARD = `border:2px solid ${C.grey};border-bottom-width:5px;border-radius:16px;padding:12px 14px`;
 const S = {
   body: `margin:0;padding:0;background:${C.lila};-webkit-text-size-adjust:100%`,
@@ -149,10 +142,12 @@ const S = {
   neeComment: `margin:4px 0 0;font-size:15px;font-weight:700;color:${C.ink};white-space:pre-wrap`,
   neeDue: `margin:8px 0 0;font-size:14px;font-weight:800;color:${C.coralD}`,
   ok: `border-radius:16px;padding:12px 14px;background:${C.lila};font-size:16px;font-weight:800;color:${C.violet}`,
+  noteTitle: `margin:0;font-size:16px;line-height:1.25;font-weight:900;color:${C.ink}`,
+  noteAnswer: `font-size:14px;font-weight:800;color:${C.sub}`,
+  noteComment: `margin:4px 0 0;font-size:15px;font-weight:700;color:${C.ink};white-space:pre-wrap`,
   good: `margin:0;font-size:15px;font-weight:700;color:${C.ink};white-space:pre-wrap`,
   note: `border-radius:14px;padding:12px 14px;background:${C.lila};font-size:15px;font-weight:700;color:${C.violet}`,
-  preheader:
-    "display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;font-size:1px;line-height:1px",
+  preheader: 'display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;font-size:1px;line-height:1px',
 } as const;
 
 /** A one-cell table with the given style: the box model every mail client agrees on. */
@@ -167,24 +162,15 @@ function renderHtml(s: Summary): string {
   const e = escapeHtml;
   const chips = [
     { text: `${s.counts.ja} × Ja`, style: S.chip },
-    {
-      text: `${s.counts.nee} × Nee`,
-      style: s.counts.nee > 0 ? S.chipNee : S.chip,
-    },
+    { text: `${s.counts.nee} × Nee`, style: s.counts.nee > 0 ? S.chipNee : S.chip },
     { text: `${s.counts.nvt} × Nvt`, style: S.chip },
   ]
-    .map(
-      (c) =>
-        `<td style="padding:0 8px 0 0"><span style="${c.style};display:inline-block">${e(c.text)}</span></td>`,
-    )
-    .join("");
+    .map((c) => `<td style="padding:0 8px 0 0"><span style="${c.style};display:inline-block">${e(c.text)}</span></td>`)
+    .join('');
   const facts = s.facts
-    .filter(([label]) => label !== "Resultaat")
-    .map(
-      ([label, value]) =>
-        `<tr><td style="${S.label}">${e(label)}</td><td style="${S.value}">${e(value)}</td></tr>`,
-    )
-    .join("");
+    .filter(([label]) => label !== 'Resultaat')
+    .map(([label, value]) => `<tr><td style="${S.label}">${e(label)}</td><td style="${S.value}">${e(value)}</td></tr>`)
+    .join('');
   const nee =
     s.nee.length === 0
       ? box(S.ok, `Alles in orde. ${NO_NEE}`)
@@ -193,20 +179,30 @@ function renderHtml(s: Summary): string {
             box(
               S.nee,
               `<p style="${S.neeTitle}">${e(item.heading)}</p>` +
-                (item.comment === ""
-                  ? ""
-                  : `<p style="${S.neeComment}">${e(item.comment)}</p>`) +
-                `<p style="${S.neeDue}">${e(item.photos === "" ? item.due : `${item.due} · ${item.photos}`)}</p>`,
+                (item.comment === '' ? '' : `<p style="${S.neeComment}">${e(item.comment)}</p>`) +
+                `<p style="${S.neeDue}">${e(item.photos === '' ? item.due : `${item.due} · ${item.photos}`)}</p>`,
             ),
           )
-          .join("");
+          .join('');
+  const notes =
+    s.notes.length === 0
+      ? ''
+      : `<p style="${S.section}">Opmerkingen</p>` +
+        s.notes
+          .map((note) =>
+            box(
+              S.card,
+              `<p style="${S.noteTitle}">${e(note.heading)} <span style="${S.noteAnswer}">· ${e(note.answer)}</span></p>` +
+                `<p style="${S.noteComment}">${e(note.comment)}</p>`,
+            ),
+          )
+          .join('');
   const good =
-    s.goodPractice === ""
-      ? ""
-      : `<p style="${S.section}">Wat gaat hier goed</p>` +
-        box(S.card, `<p style="${S.good}">${e(s.goodPractice)}</p>`);
-  const preheader = `${s.project} · ${s.counts.nee === 0 ? "geen Nee-punten" : `${s.counts.nee} × Nee`}`;
-  const resultaat = s.facts.find(([label]) => label === "Resultaat")![1];
+    s.goodPractice === ''
+      ? ''
+      : `<p style="${S.section}">Wat gaat hier goed</p>` + box(S.card, `<p style="${S.good}">${e(s.goodPractice)}</p>`);
+  const preheader = `${s.project} · ${s.counts.nee === 0 ? 'geen Nee-punten' : `${s.counts.nee} × Nee`}`;
+  const resultaat = s.facts.find(([label]) => label === 'Resultaat')![1];
   return (
     `<!doctype html><html lang="nl"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1">` +
@@ -224,12 +220,10 @@ function renderHtml(s: Summary): string {
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="${BOX};margin:16px 0 0" aria-label="${e(resultaat)}">` +
     `<tr>${chips}</tr></table>` +
     `<p style="${S.section}">Gegevens</p>` +
-    box(
-      S.card,
-      `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="${BOX}">${facts}</table>`,
-    ) +
-    `<p style="${S.section}">${s.nee.length === 0 ? "Nee-punten" : "Niet in orde"}</p>` +
+    box(S.card, `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="${BOX}">${facts}</table>`) +
+    `<p style="${S.section}">${s.nee.length === 0 ? 'Nee-punten' : 'Niet in orde'}</p>` +
     nee +
+    notes +
     good +
     `<div style="height:12px;line-height:12px;font-size:12px">&nbsp;</div>` +
     box(S.note, ATTACHMENT_NOTE, 0) +
@@ -240,11 +234,7 @@ function renderHtml(s: Summary): string {
 }
 
 /** Builds the mail for one inspection. Only the subject carries user input into a header. */
-export function buildMail(
-  sub: Submission,
-  pdf: Buffer,
-  cfg: Config,
-): MailMessage {
+export function buildMail(sub: Submission, pdf: Buffer, cfg: Config): MailMessage {
   const summary = summarise(sub);
   return {
     from: cfg.mail.from,
@@ -254,12 +244,6 @@ export function buildMail(
     ),
     text: renderText(summary),
     html: renderHtml(summary),
-    attachments: [
-      {
-        filename: pdfFileName(sub),
-        content: pdf,
-        contentType: "application/pdf",
-      },
-    ],
+    attachments: [{ filename: pdfFileName(sub), content: pdf, contentType: 'application/pdf' }],
   };
 }

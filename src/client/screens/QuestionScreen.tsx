@@ -9,6 +9,7 @@ import { ChunkyButton } from '../ui/ChunkyButton';
 import { SectionIcon } from '../ui/SectionIcon';
 import { TopBar } from '../ui/TopBar';
 import { NeeSheet } from './NeeSheet';
+import { NoteSheet } from './NoteSheet';
 
 export interface QuestionScreenProps {
   draft: Draft;
@@ -40,6 +41,8 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: Questio
   const details = draft.nee[id];
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const note = draft.notes?.[id] ?? '';
   // One pending advance at most: a second tap replaces it instead of adding another.
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const cancelAdvance = () => {
@@ -101,6 +104,17 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: Questio
           </span>
         </p>
         <AnswerGroup className="mt-2.5" name={id} legend={question.appText} value={value} onChange={answer} />
+        {/* Nee has its own comment in the Nee sheet; a note written before Nee carries over there. */}
+        {value !== 'nee' && (
+          <NoteControl
+            note={note}
+            onOpen={() => {
+              // Writing a note stops a pending auto-advance: stay on this question.
+              cancelAdvance();
+              setNoteOpen(true);
+            }}
+          />
+        )}
       </main>
 
       <footer className="px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
@@ -108,6 +122,14 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: Questio
           Volgende
         </ChunkyButton>
       </footer>
+
+      <NoteSheet
+        open={noteOpen}
+        onOpenChange={setNoteOpen}
+        text={note}
+        onChange={(text) => dispatch({ type: 'note', id, text })}
+        onDone={() => setNoteOpen(false)}
+      />
 
       <NeeSheet
         open={sheetOpen}
@@ -134,5 +156,54 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onClose }: Questio
         }}
       />
     </>
+  );
+}
+
+/** "Opmerking toevoegen", or the note itself with "Aanpassen" once there is one. */
+function NoteControl({ note, onOpen }: { note: string; onOpen: () => void }) {
+  const text = note.trim();
+  if (text === '') {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className={
+          'mt-3 flex min-h-12 items-center gap-2 self-start rounded-chunky px-1 text-[16px] font-black text-violet ' +
+          'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-violet enabled:active:opacity-70'
+        }
+      >
+        <PencilIcon />
+        Opmerking toevoegen
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={
+        'mt-3 flex w-full items-start justify-between gap-3 rounded-chunky border-2 border-b-5 border-grey bg-white px-3.5 py-3 text-left ' +
+        'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet ' +
+        'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-transform'
+      }
+    >
+      <span className="min-w-0">
+        <span className="block text-[14px] font-extrabold text-sub">Opmerking</span>
+        <span className="line-clamp-3 block text-[16px] font-bold break-words text-ink">{text}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-[15px] font-black text-violet">
+        <PencilIcon />
+        Aanpassen
+      </span>
+    </button>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </svg>
   );
 }

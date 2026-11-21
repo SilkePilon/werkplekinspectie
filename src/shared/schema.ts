@@ -18,8 +18,9 @@ export const LIMITS = {
 } as const;
 
 export type Answer =
-  | { answer: 'ja' }
-  | { answer: 'nvt' }
+  // Ja and Nvt may carry an optional comment; Nee always has one.
+  | { answer: 'ja'; comment?: string }
+  | { answer: 'nvt'; comment?: string }
   | {
       answer: 'nee';
       comment: string;
@@ -78,8 +79,8 @@ const photo = dataUrl(['data:image/jpeg;base64,'], LIMITS.photoBytes);
 const signature = dataUrl(['data:image/png;base64,'], LIMITS.signatureBytes);
 
 const answerSchema = z.discriminatedUnion('answer', [
-  z.strictObject({ answer: z.literal('ja') }),
-  z.strictObject({ answer: z.literal('nvt') }),
+  z.strictObject({ answer: z.literal('ja'), comment: z.string().max(LIMITS.comment).optional() }),
+  z.strictObject({ answer: z.literal('nvt'), comment: z.string().max(LIMITS.comment).optional() }),
   z.strictObject({
     answer: z.literal('nee'),
     comment: requiredText(LIMITS.comment),

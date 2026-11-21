@@ -26,6 +26,11 @@ export interface Draft {
   answers: Partial<Record<QuestionId, AnswerValue>>;
   /** Kept when an answer goes back to Ja/Nvt, so switching back to Nee restores them. */
   nee: Partial<Record<QuestionId, NeeDetails>>;
+  /**
+   * Optional comments on Ja/Nvt answers. A Nee answer uses `nee[id].comment` instead; the note
+   * seeds it when the answer becomes Nee. Optional: drafts saved before notes existed lack it.
+   */
+  notes?: Partial<Record<QuestionId, string>>;
   goodPractice: string;
   signature?: string;
   signedAt?: string;
@@ -37,6 +42,7 @@ export interface Draft {
 export type DraftAction =
   | { type: 'answer'; id: QuestionId; value: AnswerValue }
   | { type: 'neeDetails'; id: QuestionId; details: Partial<NeeDetails> }
+  | { type: 'note'; id: QuestionId; text: string }
   | { type: 'goodPractice'; text: string }
   | { type: 'sign'; signature: string; at: string }
   | { type: 'declare'; value: boolean }
@@ -79,6 +85,7 @@ export function newDraft(monteur: string, project: string, projectnummer: string
     updatedAt: at,
     answers: {},
     nee: {},
+    notes: {},
     goodPractice: '',
     declaration: false,
     website: '',
@@ -87,10 +94,21 @@ export function newDraft(monteur: string, project: string, projectnummer: string
 
 const EMPTY_NEE: NeeDetails = { comment: '', actionBefore: '', photos: [] };
 
+const blank = (s: string | undefined) => !s || s.trim().length === 0;
+
 function apply(d: Draft, a: DraftAction): Draft {
   switch (a.type) {
-    case 'answer':
-      return { ...d, answers: { ...d.answers, [a.id]: a.value } };
+    case 'answer': {
+      const next = { ...d, answers: { ...d.answers, [a.id]: a.value } };
+      // A comment written before picking Nee becomes the start of "Wat is er mis?".
+      const note = d.notes?.[a.id] ?? '';
+      if (a.value === 'nee' && note.trim() !== '' && blank(d.nee[a.id]?.comment)) {
+        next.nee = { ...d.nee, [a.id]: { ...EMPTY_NEE, ...d.nee[a.id], comment: note } };
+      }
+      return next;
+    }
+    case 'note':
+      return { ...d, notes: { ...d.notes, [a.id]: a.text.slice(0, LIMITS.comment) } };
     case 'neeDetails':
       return { ...d, nee: { ...d.nee, [a.id]: { ...EMPTY_NEE, ...d.nee[a.id], ...a.details } } };
     case 'goodPractice':
@@ -115,8 +133,6 @@ function apply(d: Draft, a: DraftAction): Draft {
 export function draftReducer(d: Draft, a: DraftAction): Draft {
   return { ...apply(d, a), updatedAt: toIsoWithOffset(new Date()) };
 }
-
-const blank = (s: string | undefined) => !s || s.trim().length === 0;
 
 /**
  * Everything still needed before the draft can be sent, as dotted paths. Empty when complete.
@@ -155,7 +171,10 @@ export function missingFields(d: Draft): string[] {
 
 function toAnswer(d: Draft, id: QuestionId): Answer {
   const value = d.answers[id];
-  if (value === 'ja' || value === 'nvt') return { answer: value };
+  if (value === 'ja' || value === 'nvt') {
+    const note = (d.notes?.[id] ?? '').trim();
+    return note === '' ? { answer: value } : { answer: value, comment: note };
+  }
   const details = { ...EMPTY_NEE, ...d.nee[id] };
   return {
     answer: 'nee',
@@ -194,11 +213,14 @@ export function toSubmission(d: Draft): Submission {
 export function draftFromSubmission(s: Submission): Draft {
   const answers: Draft['answers'] = {};
   const nee: Draft['nee'] = {};
+  const notes: NonNullable<Draft['notes']> = {};
   for (const id of QUESTION_IDS) {
     const a = s.answers[id];
     answers[id] = a.answer;
     if (a.answer === 'nee') {
       nee[id] = { comment: a.comment, actionBefore: a.actionBefore, photos: [...a.photos] };
+    } else if (a.comment !== undefined && a.comment !== '') {
+      notes[id] = a.comment;
     }
   }
   return {
@@ -211,6 +233,7 @@ export function draftFromSubmission(s: Submission): Draft {
     updatedAt: toIsoWithOffset(new Date()),
     answers,
     nee,
+    notes,
     goodPractice: s.goodPractice,
     signedAt: s.signedAt,
     declaration: false,

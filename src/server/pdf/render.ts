@@ -209,7 +209,13 @@ function questionRow(q: Question, answer: Answer, monteur: string): Row {
     answer.answer === 'nee' ? X : {},
     answer.answer === 'nvt' ? X : {},
   ];
-  if (answer.answer !== 'nee') return { cells: [...cells, {}, {}, {}, {}, {}] };
+  if (answer.answer !== 'nee') {
+    const comment = answer.comment ?? '';
+    return {
+      ...(comment === '' ? {} : { continuation: `${description} (vervolg)` }),
+      cells: [...cells, comment === '' ? {} : { text: comment }, {}, {}, {}, {}],
+    };
+  }
   return {
     fill: COLORS.neeFill,
     continuation: `${description} (vervolg)`,

@@ -343,6 +343,80 @@ describe('question flow', () => {
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
   });
 
+  test('a comment can be added before or after Ja, is saved, and shows in the summary', async () => {
+    const user = setup();
+    render(<App />);
+    await fillStart(user);
+    await user.click(await screen.findByRole('button', { name: 'Start inspectie' }));
+    await settle();
+
+    // Before answering: write the note, then Ja still auto-advances.
+    await user.click(button('Opmerking toevoegen'));
+    const dialog = screen.getByRole('dialog', { name: 'Opmerking' });
+    expect(within(dialog).getByText('Niet verplicht. Mag kort.')).toBeTruthy();
+    await user.type(within(dialog).getByRole('textbox', { name: 'Opmerking' }), 'Ligt in de bus');
+    await user.click(button('Klaar', dialog));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText(Q1A)).toBeTruthy();
+    expect(screen.getByText('Ligt in de bus')).toBeTruthy();
+    await user.click(screen.getByText('Ja'));
+    await tick(300);
+    expect(screen.getByText(Q1B)).toBeTruthy();
+
+    // After answering: opening the note cancels the pending advance.
+    await settle();
+    await user.click(screen.getByText('Niet van toepassing'));
+    await user.click(button('Opmerking toevoegen'));
+    await tick(400);
+    expect(screen.getByText(Q1B)).toBeTruthy();
+    const second = screen.getByRole('dialog', { name: 'Opmerking' });
+    await user.type(within(second).getByRole('textbox', { name: 'Opmerking' }), 'Geen plan nodig');
+    await user.click(button('Klaar', second));
+    expect(screen.getByText(Q1B)).toBeTruthy();
+    await user.click(button('Volgende'));
+    expect(screen.getByText(Q1C)).toBeTruthy();
+
+    await tick(300);
+    await waitFor(async () => {
+      const saved = await loadDraft();
+      expect(saved?.notes).toEqual({ '1A': 'Ligt in de bus', '1B': 'Geen plan nodig' });
+    });
+  });
+
+  test('a comment written before Nee is the start of "Wat is er mis?"', async () => {
+    const user = setup();
+    await seed({});
+    await resume(user);
+    await user.click(button('Opmerking toevoegen'));
+    const note = screen.getByRole('dialog', { name: 'Opmerking' });
+    await user.type(within(note).getByRole('textbox', { name: 'Opmerking' }), 'Handboekje kwijt');
+    await user.click(button('Klaar', note));
+    await user.click(screen.getByText('Nee'));
+    expect((within(neeDialog()).getByRole('textbox', { name: 'Wat is er mis?' }) as HTMLTextAreaElement).value).toBe(
+      'Handboekje kwijt',
+    );
+    // The Nee sheet holds the comment now; no separate note control while the answer is Nee.
+    await user.click(button('Doorgaan', neeDialog()));
+    expect(screen.queryByRole('button', { name: 'Opmerking toevoegen' })).toBeNull();
+  });
+
+  test('the summary lists Ja/Nvt comments and opens the question to change one', async () => {
+    const user = setup();
+    const d = await seed(allJaExcept());
+    await saveDraft({ ...d, notes: { '4B': 'Gekeurd in oktober' } });
+    render(<App />);
+    await screen.findByText('Je bent nog bezig met een inspectie');
+    const state = { screen: { name: 'summary' } };
+    act(() => {
+      history.pushState(state, '');
+      dispatchEvent(new PopStateEvent('popstate', { state }));
+    });
+    const section = screen.getByRole('region', { name: 'Opmerkingen' });
+    await user.click(within(section).getByRole('button', { name: /Gekeurd in oktober/ }));
+    expect(screen.getByText('Zijn de blusmiddelen gekeurd?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Aanpassen/ })).toBeTruthy();
+  });
+
   test('autosave is flushed at once when the page is hidden', async () => {
     const user = setup();
     await seed({});

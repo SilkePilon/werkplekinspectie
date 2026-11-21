@@ -83,9 +83,20 @@ describe('submissionSchema', () => {
     expect(ok(s)).toBe(false);
   });
 
-  test('rejects nee details on a ja answer', () => {
+  test('accepts an optional comment on ja and nvt, up to the comment limit', () => {
     const s = validSubmission();
-    expect(ok({ ...s, answers: { ...s.answers, '1A': { answer: 'ja', comment: 'x' } } })).toBe(false);
+    const withAnswer = (a: unknown) => ({ ...s, answers: { ...s.answers, '1A': a } });
+    expect(ok(withAnswer({ answer: 'ja', comment: 'Plan hangt bij de ingang.' }))).toBe(true);
+    expect(ok(withAnswer({ answer: 'nvt', comment: '' }))).toBe(true);
+    expect(ok(withAnswer({ answer: 'ja', comment: 'x'.repeat(LIMITS.comment) }))).toBe(true);
+    expect(ok(withAnswer({ answer: 'ja', comment: 'x'.repeat(LIMITS.comment + 1) }))).toBe(false);
+  });
+
+  test('rejects nee details other than the comment on a ja answer', () => {
+    const s = validSubmission();
+    const withAnswer = (a: unknown) => ({ ...s, answers: { ...s.answers, '1A': a } });
+    expect(ok(withAnswer({ answer: 'ja', actionBefore: '2099-01-01' }))).toBe(false);
+    expect(ok(withAnswer({ answer: 'nvt', photos: [] }))).toBe(false);
   });
 
   test('rejects 4 photos on one item', () => {

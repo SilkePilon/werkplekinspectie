@@ -368,6 +368,79 @@ describe('missingFields matches what the server refuses', () => {
   });
 });
 
+describe('notes on Ja and Nvt', () => {
+  test('a note on ja or nvt goes out trimmed as the comment; an empty note is left out', () => {
+    const d = apply(
+      complete(),
+      { type: 'note', id: '1B', text: '  Plan hangt bij de ingang.  ' },
+      { type: 'answer', id: '9B', value: 'nvt' },
+      { type: 'note', id: '9B', text: 'Kort klusje.' },
+      { type: 'note', id: '2A', text: '   ' },
+    );
+    const sub = toSubmission(d);
+    expect(sub.answers['1B']).toEqual({ answer: 'ja', comment: 'Plan hangt bij de ingang.' });
+    expect(sub.answers['9B']).toEqual({ answer: 'nvt', comment: 'Kort klusje.' });
+    expect(sub.answers['2A']).toEqual({ answer: 'ja' });
+    expect(submissionSchema.safeParse(sub).success).toBe(true);
+  });
+
+  test('a note never makes the draft incomplete', () => {
+    expect(missingFields(apply(complete(), { type: 'note', id: '1A', text: '' }))).toEqual([]);
+  });
+
+  test('caps a note at the comment limit', () => {
+    const d = apply(complete(), { type: 'note', id: '1A', text: 'x'.repeat(1200) });
+    expect(d.notes?.['1A']).toHaveLength(1000);
+  });
+
+  test('a note written before Nee becomes the Nee comment, but never overwrites one', () => {
+    const base = newDraft('J. Jansen', 'P', 'P-1', START);
+    const seeded = apply(base, { type: 'note', id: '3A', text: 'Ladder los' }, { type: 'answer', id: '3A', value: 'nee' });
+    expect(seeded.nee['3A']).toEqual({ comment: 'Ladder los', actionBefore: '', photos: [] });
+
+    const kept = apply(
+      base,
+      { type: 'answer', id: '3A', value: 'nee' },
+      { type: 'neeDetails', id: '3A', details: { comment: 'Eerdere tekst' } },
+      { type: 'answer', id: '3A', value: 'ja' },
+      { type: 'note', id: '3A', text: 'Nieuwe notitie' },
+      { type: 'answer', id: '3A', value: 'nee' },
+    );
+    expect(kept.nee['3A']?.comment).toBe('Eerdere tekst');
+  });
+
+  test('a note on an item that is Nee is not sent: the Nee comment is', () => {
+    const d = apply(
+      complete(),
+      { type: 'note', id: '4B', text: 'Notitie' },
+      { type: 'answer', id: '4B', value: 'nee' },
+      { type: 'neeDetails', id: '4B', details: { comment: 'Sticker van 2023', actionBefore: '2099-01-01' } },
+    );
+    expect(toSubmission(d).answers['4B']).toEqual({
+      answer: 'nee',
+      comment: 'Sticker van 2023',
+      actionBefore: '2099-01-01',
+      photos: [],
+    });
+  });
+
+  test('a draft saved before notes existed still works', () => {
+    const old: Draft = { ...complete() };
+    delete old.notes;
+    expect(toSubmission(old).answers['1A']).toEqual({ answer: 'ja' });
+    expect(apply(old, { type: 'note', id: '1A', text: 'x' }).notes).toEqual({ '1A': 'x' });
+  });
+
+  test('draftFromSubmission restores ja and nvt comments as notes', () => {
+    const sub = toSubmission(
+      apply(complete(), { type: 'answer', id: '9B', value: 'nvt' }, { type: 'note', id: '9B', text: 'Kort klusje.' }),
+    );
+    const back = draftFromSubmission(sub);
+    expect(back.notes).toEqual({ '9B': 'Kort klusje.' });
+    expect(toSubmission(signed(back)).answers['9B']).toEqual({ answer: 'nvt', comment: 'Kort klusje.' });
+  });
+});
+
 describe('nextUnanswered', () => {
   test("returns '1A' on a new draft and null when all are answered", () => {
     const d = newDraft('J. Jansen', 'X', 'P-1', START);

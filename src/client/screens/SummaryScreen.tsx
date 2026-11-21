@@ -56,10 +56,15 @@ export function SummaryScreen({
   onNext,
   onClose,
 }: SummaryScreenProps) {
-  const ids = { nee: useId(), all: useId(), why: useId() };
+  const ids = { nee: useId(), notes: useId(), all: useId(), why: useId() };
   const total = counts(draft);
   const incomplete = incompleteQuestions(draft);
   const neeQuestions = QUESTIONS.filter((q) => draft.answers[q.id] === 'nee');
+  // Notes only count on Ja/Nvt; a Nee item shows its own comment on its card.
+  const noteQuestions = QUESTIONS.filter((q) => {
+    const value = draft.answers[q.id];
+    return (value === 'ja' || value === 'nvt') && (draft.notes?.[q.id] ?? '').trim() !== '';
+  });
   // The highlight sits on the Nee card when there is one, else on the section row.
   const highlightOnCard = highlight !== undefined && draft.answers[highlight] === 'nee';
   const marked = useRef<HTMLElement>(null);
@@ -108,6 +113,21 @@ export function SummaryScreen({
                   markRef={marked}
                   onEdit={onEdit}
                 />
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {noteQuestions.length > 0 && (
+          <section aria-labelledby={ids.notes}>
+            <SectionTitle id={ids.notes}>Opmerkingen</SectionTitle>
+            <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+              {noteQuestions.map((q) => (
+                <li key={q.id}>
+                  <Row title={`${q.id} ${q.appText}`} highlighted={false} onClick={() => onEdit(q.id)}>
+                    <span className="line-clamp-2 break-words">{`${LABELS[draft.answers[q.id]!]}: ${draft.notes![q.id]!.trim()}`}</span>
+                  </Row>
+                </li>
               ))}
             </ul>
           </section>

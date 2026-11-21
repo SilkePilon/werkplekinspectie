@@ -152,6 +152,38 @@ describe('renderInspectionPdf', () => {
     expect(jaRow.map((it) => it.str)).not.toContain('J. Jansen');
   });
 
+  test('prints a Ja or Nvt comment in Commentaar, with Vastgesteld door and dates left empty', async () => {
+    const answers = makeSubmission().answers;
+    const sub = makeSubmission({
+      answers: {
+        ...answers,
+        '1A': { answer: 'ja', comment: 'Ligt in de bus' },
+        '1C': { answer: 'nvt', comment: 'Eigen project' },
+      },
+    });
+    const { items } = await extractTextItems(new Uint8Array(await renderInspectionPdf(sub, BRANDING)));
+    const page1 = items[0] ?? [];
+    const center = (it: { x: number; width: number }) => it.x + it.width / 2;
+    const commentaar = page1.find((it) => it.str === 'Commentaar');
+    const vastgesteld = page1.find((it) => it.str.startsWith('Vastgesteld'));
+    if (!commentaar || !vastgesteld) throw new Error('headers not found');
+    const rowOf = (formText: string) => {
+      const y = page1.find((it) => it.str.includes(formText))!.y;
+      return page1.filter((it) => Math.abs(it.y - y) < 2);
+    };
+    for (const [row, text] of [
+      [rowOf('VGM-handboekje voorhanden'), 'Ligt in de bus'],
+      [rowOf('veiligheidsinstructie opdrachtgever'), 'Eigen project'],
+    ] as const) {
+      const cell = row.find((it) => it.str === text);
+      expect(cell).toBeDefined();
+      // Left-aligned in the Commentaar column: starts left of the next column's header.
+      expect(cell!.x).toBeLessThan(center(vastgesteld));
+      expect(cell!.x + cell!.width).toBeGreaterThan(commentaar.x - 40);
+      expect(row.map((it) => it.str)).not.toContain('J. Jansen');
+    }
+  });
+
   test('adds one photo page per two photos, captioned with id and form text', async () => {
     const withoutPhotos = await pagesOf(
       await renderInspectionPdf(makeSubmission({}, { neeIds: ['3A', '4B'] }), BRANDING),
