@@ -92,7 +92,6 @@ function drawHeader(
   const fields: [string, string][] = [
     ['Origineel:', `Afdeling ${branding.department}`.trim()],
     ['Kopie:', 'VG functionaris'],
-    ['Reg:', ''],
     ['Project:', sub.project],
     ['Projectnummer:', sub.projectnummer],
   ];

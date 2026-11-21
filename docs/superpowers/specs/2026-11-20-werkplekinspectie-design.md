@@ -159,7 +159,7 @@ Referentie: **Duolingo / Kahoot** — rustig, speels, één ding per scherm. Moc
 
 pdfkit, **liggend A4**, nagebouwd naar het Word-formulier:
 - Kop: logo (uit configuratie, §11), titel "Werkplekinspectie Arbo en Milieu", adresblok (uit configuratie),
-  Origineel: Afdeling {afdeling, configuratie, standaard "Customer Care"}, Kopie: VG functionaris, Reg: leeg,
+  Origineel: Afdeling {afdeling, configuratie, standaard "Customer Care"}, Kopie: VG functionaris (geen Reg-rij),
   Project, Projectnummer.
 - Blok handtekeningen: *Inspectie uitgevoerd door* = naam monteur + datum/tijd; *Handtekening monteur* =
   handtekening-afbeelding + datum/tijd; *VGM functionaris: {naam uit configuratie}* paraaf leeg; *Afmelding / gezien d.d.* leeg.

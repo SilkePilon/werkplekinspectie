@@ -61,7 +61,6 @@ describe('renderInspectionPdf', () => {
     for (const text of [
       'Origineel: Afdeling Customer Care',
       'Kopie: VG functionaris',
-      'Reg:',
       'Project:',
       'Nieuwbouw Voorbeeld B.V.',
       'Projectnummer:',
@@ -80,6 +79,8 @@ describe('renderInspectionPdf', () => {
     ]) {
       expect(page1).toContain(squash(text));
     }
+    // The paper form's empty "Reg:" row is left out.
+    expect(page1).not.toContain('Reg:');
   });
 
   test('every page has the footer with Internal, Blad n and the signing time in Amsterdam', async () => {
