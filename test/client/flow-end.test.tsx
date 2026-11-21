@@ -230,7 +230,7 @@ describe('summary', () => {
 
     await tick(300);
     await user.click(screen.getByText('Ja'));
-    await tick(300);
+    await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
     expect(screen.getByText('21 × Ja')).toBeTruthy();
     expect(screen.getByText('0 × Nee')).toBeTruthy();
@@ -248,7 +248,7 @@ describe('summary', () => {
 
     await tick(300);
     await user.click(screen.getByText('Niet van toepassing'));
-    await tick(300);
+    await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
     expect(screen.getByText('1 × Nvt')).toBeTruthy();
   });
@@ -290,7 +290,7 @@ describe('summary', () => {
 
     await tick(300);
     await user.click(screen.getByText('Ja'));
-    await tick(300);
+    await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
     expect(summaryButton().disabled).toBe(false);
   });

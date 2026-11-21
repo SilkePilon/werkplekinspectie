@@ -96,7 +96,7 @@ async function fillStart(user: ReturnType<typeof setup>) {
 }
 
 describe('question flow', () => {
-  test('start, Ja auto-advances, Nee needs details, reload resumes, back button works', async () => {
+  test('start, Ja waits for Volgende, Nee needs details, reload resumes, back button works', async () => {
     const user = setup();
     const { unmount } = render(<App />);
 
@@ -115,8 +115,10 @@ describe('question flow', () => {
     await settle();
     await user.click(screen.getByText('Ja'));
     expect(radio('Ja').checked).toBe(true);
+    // An answer never moves on by itself.
+    await tick(1000);
     expect(screen.getByText(Q1A)).toBeTruthy();
-    await tick(300);
+    await user.click(button('Volgende'));
     expect(screen.getByText(Q1B)).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Vraag 2 van 21' })).toBeTruthy();
 
@@ -131,8 +133,12 @@ describe('question flow', () => {
     await user.type(within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }), 'Geen plan aanwezig');
     fireEvent.change(within(dialog).getByLabelText('Opgelost vóór'), { target: { value: FUTURE } });
     await user.click(button('Doorgaan', dialog));
-    expect(screen.getByText(Q1C)).toBeTruthy();
+    // Doorgaan closes the sheet; Volgende moves on.
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText(Q1B)).toBeTruthy();
+    expect(radio('Nee').checked).toBe(true);
+    await user.click(button('Volgende'));
+    expect(screen.getByText(Q1C)).toBeTruthy();
 
     // Autosave runs ~300ms after the last change.
     await tick(300);
@@ -154,22 +160,21 @@ describe('question flow', () => {
     expect(radio('Nee').checked).toBe(true);
   });
 
-  test('a second tap within the delay changes the answer but advances only once', async () => {
+  test('changing the answer before Volgende keeps the last one', async () => {
     const user = setup();
     await seed({});
     await resume(user);
     await user.click(screen.getByText('Ja'));
-    await tick(100);
     await user.click(screen.getByText('Niet van toepassing'));
-    await tick(300);
-    expect(screen.getByText(Q1B)).toBeTruthy();
     await tick(1000);
+    expect(screen.getByText(Q1A)).toBeTruthy();
+    await user.click(button('Volgende'));
     expect(screen.getByText(Q1B)).toBeTruthy();
     await tick(300);
     await waitFor(async () => expect((await loadDraft())?.answers).toEqual({ '1A': 'nvt' }));
   });
 
-  test('Nee within the delay cancels the pending advance and opens the sheet', async () => {
+  test('Nee after Ja opens the sheet on the same question', async () => {
     const user = setup();
     await seed({});
     await resume(user);
@@ -181,23 +186,20 @@ describe('question flow', () => {
     expect(neeDialog()).toBeTruthy();
   });
 
-  test('with reduced motion Ja advances at once; a double tap does not answer the next question', async () => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn((query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' })),
-    );
+  test('a tap right after Volgende does not answer the next question', async () => {
     const user = setup();
     await seed({});
     await resume(user);
     await user.click(screen.getByText('Ja'));
+    await user.click(button('Volgende'));
     expect(screen.getByText(Q1B)).toBeTruthy();
-    // The second tap of the double tap lands on 1B's Ja.
+    // A tap that lands on 1B's Ja straight away is ignored.
     await user.click(screen.getByText('Ja'));
-    expect(screen.getByText(Q1B)).toBeTruthy();
     expect(screen.getAllByRole('radio').some((r) => (r as HTMLInputElement).checked)).toBe(false);
 
     await settle();
     await user.click(screen.getByText('Ja'));
+    await user.click(button('Volgende'));
     expect(screen.getByText(Q1C)).toBeTruthy();
     await tick(300);
     await waitFor(async () => expect((await loadDraft())?.answers).toEqual({ '1A': 'ja', '1B': 'ja' }));
@@ -215,10 +217,12 @@ describe('question flow', () => {
     const message = 'Opslaan op deze telefoon lukt niet. Probeer het opnieuw of verwijder een foto.';
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe(message);
+    await user.click(button('Volgende'));
     expect(screen.getByText(Q1B)).toBeTruthy();
     await tick(1000);
     expect(screen.getByText(message)).toBeTruthy();
 
+    await settle();
     await user.click(screen.getByText('Ja'));
     await tick(300);
     await waitFor(() => expect(screen.queryByText(message)).toBeNull());
@@ -293,6 +297,8 @@ describe('question flow', () => {
 
     fireEvent.change(date, { target: { value: amsterdamDateKey(d.startedAt) } });
     await user.click(button('Doorgaan', dialog));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(button('Volgende'));
     expect(screen.getByText(Q1B)).toBeTruthy();
   });
 
@@ -320,7 +326,7 @@ describe('question flow', () => {
     await resume(user);
     expect(screen.getByText(Q9B)).toBeTruthy();
     await user.click(screen.getByText('Ja'));
-    await tick(300);
+    await user.click(button('Volgende'));
     expect(
       screen.getByRole('heading', { name: 'Wat gaat hier goed? Waar kan de rest van het bedrijf van leren?' }),
     ).toBeTruthy();
@@ -339,7 +345,7 @@ describe('question flow', () => {
     expect(screen.getByText('Zijn de blusmiddelen gekeurd?')).toBeTruthy();
     await settle();
     await user.click(screen.getByText('Niet van toepassing'));
-    await tick(300);
+    await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
   });
 
@@ -350,7 +356,7 @@ describe('question flow', () => {
     await user.click(await screen.findByRole('button', { name: 'Start inspectie' }));
     await settle();
 
-    // Before answering: write the note, then Ja still auto-advances.
+    // Before answering: write the note, then answer.
     await user.click(button('Opmerking toevoegen'));
     const dialog = screen.getByRole('dialog', { name: 'Opmerking' });
     expect(within(dialog).getByText('Niet verplicht. Mag kort.')).toBeTruthy();
@@ -360,14 +366,13 @@ describe('question flow', () => {
     expect(screen.getByText(Q1A)).toBeTruthy();
     expect(screen.getByText('Ligt in de bus')).toBeTruthy();
     await user.click(screen.getByText('Ja'));
-    await tick(300);
+    await user.click(button('Volgende'));
     expect(screen.getByText(Q1B)).toBeTruthy();
 
-    // After answering: opening the note cancels the pending advance.
+    // After answering: the note is added on the same question.
     await settle();
     await user.click(screen.getByText('Niet van toepassing'));
     await user.click(button('Opmerking toevoegen'));
-    await tick(400);
     expect(screen.getByText(Q1B)).toBeTruthy();
     const second = screen.getByRole('dialog', { name: 'Opmerking' });
     await user.type(within(second).getByRole('textbox', { name: 'Opmerking' }), 'Geen plan nodig');
@@ -425,7 +430,7 @@ describe('question flow', () => {
     expect(screen.queryByRole('button', { name: 'Vorige' })).toBeNull();
     await settle();
     await user.click(screen.getByText('Ja'));
-    await tick(300);
+    await user.click(button('Volgende'));
     expect(screen.getByText(Q1B)).toBeTruthy();
 
     await user.click(button('Vorige'));
@@ -438,7 +443,7 @@ describe('question flow', () => {
     await waitFor(() => expect(screen.getByText(Q1A)).toBeTruthy());
   });
 
-  test('back right after tapping Ja cancels the pending auto-advance', async () => {
+  test('back right after answering goes to the previous question and stays there', async () => {
     const user = setup();
     await seed({ '1A': 'ja' });
     await resume(user);
@@ -590,7 +595,7 @@ describe('photos', () => {
     await user.click(screen.getByText('Ja'));
     await act(async () => finish(PHOTO));
     await tick(300);
-    expect(screen.getByText(Q1B)).toBeTruthy();
+    expect(screen.getByText(Q1A)).toBeTruthy();
     await waitFor(async () => expect((await loadDraft())?.answers).toEqual({ '1A': 'ja' }));
     expect((await loadDraft())?.nee['1A']?.photos ?? []).toEqual([]);
   });

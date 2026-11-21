@@ -82,7 +82,8 @@ Eén ding per scherm, in de stijl van Duolingo/Kahoot (zie mockups in `docs/desi
 2. **21 vragen**, één per scherm, gegroepeerd per onderdeel (onderdeelnaam + icoon boven de vraag).
    Bovenaan een voortgangsbalk en een sluitknop (X → terug naar start; concept blijft bewaard).
    - Drie grote knoppen: **Ja**, **Nee**, **Niet van toepassing**.
-   - **Ja / Nvt → automatisch door** naar de volgende vraag (korte bevestigingsanimatie, ~300 ms).
+   - **Geen automatisch doorgaan:** een antwoord blijft staan tot de monteur op **Volgende** tikt (ook na
+     *Doorgaan* in het Nee-paneel). Onder elke vraag kan een opmerking bij Ja/Nvt.
    - **Nee →** paneel schuift omhoog: "Wat is er mis?" (verplicht), **Opgelost vóór** (datum, verplicht,
      native datumkiezer, niet in het verleden), **Foto** (optioneel, max. 3 per punt). Knop *Doorgaan*.
    - Terug naar de vorige vraag kan altijd (terugknop van telefoon/browser werkt ook).

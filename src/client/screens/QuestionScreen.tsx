@@ -23,17 +23,11 @@ export interface QuestionScreenProps {
   onClose: () => void;
 }
 
-/** Long enough to see the selected state, short enough not to feel slow. */
-const ADVANCE_MS = 300;
 /**
  * Taps on the answers are ignored this long after the question appears: the second half of a
- * double tap (on Ja, Verder gaan or Start) must not answer the next question by accident.
+ * double tap (on Volgende, Verder gaan or Start) must not answer the new question by accident.
  */
 const TAP_GUARD_MS = 300;
-
-function prefersReducedMotion(): boolean {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-}
 
 export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }: QuestionScreenProps) {
   const index = QUESTION_IDS.indexOf(id);
@@ -45,13 +39,6 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }:
   const [sheetOpen, setSheetOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const note = draft.notes?.[id] ?? '';
-  // One pending advance at most: a second tap replaces it instead of adding another.
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const cancelAdvance = () => {
-    clearTimeout(timer.current);
-    timer.current = undefined;
-  };
-  useEffect(() => cancelAdvance, []);
   const settled = useRef(false);
   useEffect(() => {
     const t = setTimeout(() => {
@@ -62,24 +49,14 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }:
 
   if (!question || !section) throw new Error(`Onbekende vraag ${id}`);
 
+  /** Picking an answer never moves on by itself: the technician taps Volgende. */
   function answer(v: AnswerValue) {
     if (!settled.current) return;
     dispatch({ type: 'answer', id, value: v });
-    cancelAdvance();
-    if (v === 'nee') {
-      setSheetOpen(true);
-    } else if (prefersReducedMotion()) {
-      onNext();
-    } else {
-      timer.current = setTimeout(() => {
-        timer.current = undefined;
-        onNext();
-      }, ADVANCE_MS);
-    }
+    if (v === 'nee') setSheetOpen(true);
   }
 
   function next() {
-    cancelAdvance();
     // Nee without comment or date, a date before the inspection day, or too many photos.
     const prefix = `answers.${id}.`;
     if (value === 'nee' && missingFields(draft).some((p) => p.startsWith(prefix))) setSheetOpen(true);
@@ -98,18 +75,8 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }:
       <TopBar
         progress={(index + 1) / QUESTION_IDS.length}
         label={label}
-        onBack={
-          onBack &&
-          (() => {
-            // Going back must not be followed by a pending auto-advance from a just-tapped Ja.
-            cancelAdvance();
-            onBack();
-          })
-        }
-        onClose={() => {
-          cancelAdvance();
-          onClose();
-        }}
+        onBack={onBack}
+        onClose={onClose}
       />
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
@@ -125,11 +92,7 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }:
         {value !== 'nee' && (
           <NoteControl
             note={note}
-            onOpen={() => {
-              // Writing a note stops a pending auto-advance: stay on this question.
-              cancelAdvance();
-              setNoteOpen(true);
-            }}
+            onOpen={() => setNoteOpen(true)}
           />
         )}
       </main>
@@ -167,10 +130,8 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }:
               : null,
           )
         }
-        onDone={() => {
-          setSheetOpen(false);
-          onNext();
-        }}
+        // Doorgaan closes the sheet; moving on is Volgende, as for every answer.
+        onDone={() => setSheetOpen(false)}
       />
     </>
   );
