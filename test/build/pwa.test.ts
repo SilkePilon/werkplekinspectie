@@ -48,7 +48,7 @@ describe('manifest.webmanifest', () => {
       description: 'Werkplekinspectie Arbo en Milieu invullen, ondertekenen en versturen.',
       lang: 'nl',
       display: 'standalone',
-      orientation: 'portrait',
+      orientation: 'any',
       start_url: '/',
       scope: '/',
       theme_color: '#FF5800',

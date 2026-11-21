@@ -12,15 +12,15 @@ afterEach(() => {
 });
 
 describe('compressPhoto', () => {
-  // 0.55 MB keeps 15 photos plus signature under the 12 MB body limit. No web worker: the
+  // 0.4 MB keeps 15 photos plus signature under the 12 MB body limit. No web worker: the
   // library would load it from a CDN, which the CSP blocks.
-  test('compresses to max 1600px and 0.55 MB, JPEG at quality 0.7, on the main thread', async () => {
+  test('compresses to max 1280px and 0.4 MB, JPEG at quality 0.7, on the main thread', async () => {
     compress.mockResolvedValue(new File([new Uint8Array([0xff, 0xd8, 0xff])], 'x.jpg', { type: 'image/jpeg' }));
     const url = await compressPhoto(input);
     expect(url).toBe('data:image/jpeg;base64,/9j/');
     expect(compress).toHaveBeenCalledExactlyOnceWith(input, {
-      maxSizeMB: 0.55,
-      maxWidthOrHeight: 1600,
+      maxSizeMB: 0.4,
+      maxWidthOrHeight: 1280,
       initialQuality: 0.7,
       fileType: 'image/jpeg',
       useWebWorker: false,

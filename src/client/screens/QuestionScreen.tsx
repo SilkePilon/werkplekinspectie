@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { amsterdamDateKey } from '@shared/dates';
+import { amsterdamDateKey, formatDayLong, formatDayWeekday } from '@shared/dates';
 import { QUESTIONS, QUESTION_IDS, SECTIONS, type QuestionId } from '@shared/questions';
-import { LIMITS } from '@shared/schema';
+import { LIMITS } from '@shared/limits';
 import type { DraftDispatch } from '../App';
-import { missingFields, type AnswerValue, type Draft } from '../state/draft';
+import { missingFields, type AnswerValue, type Draft, type NeeDetails } from '../state/draft';
+import { cn } from '../ui/cn';
 import { AnswerGroup } from '../ui/AnswerGroup';
 import { ChunkyButton } from '../ui/ChunkyButton';
 import { SectionIcon } from '../ui/SectionIcon';
@@ -56,10 +57,12 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }:
     if (v === 'nee') setSheetOpen(true);
   }
 
+  // Nee without comment or date, a date before the inspection day, or too many photos.
+  const prefix = `answers.${id}.`;
+  const neeIncomplete = value === 'nee' && missingFields(draft).some((p) => p.startsWith(prefix));
+
   function next() {
-    // Nee without comment or date, a date before the inspection day, or too many photos.
-    const prefix = `answers.${id}.`;
-    if (value === 'nee' && missingFields(draft).some((p) => p.startsWith(prefix))) setSheetOpen(true);
+    if (neeIncomplete) setSheetOpen(true);
     else onNext();
   }
 
@@ -89,11 +92,11 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }:
         </p>
         <AnswerGroup className="mt-2.5" name={id} legend={question.appText} value={value} onChange={answer} />
         {/* Nee has its own comment in the Nee sheet; a note written before Nee carries over there. */}
-        {value !== 'nee' && (
-          <NoteControl
-            note={note}
-            onOpen={() => setNoteOpen(true)}
-          />
+        {value === 'nee' ? (
+          // Shown once the sheet is closed: what was filled in, so it is clear it is kept.
+          !sheetOpen && <NeeSummary details={details} incomplete={neeIncomplete} onOpen={() => setSheetOpen(true)} />
+        ) : (
+          <NoteControl note={note} onOpen={() => setNoteOpen(true)} />
         )}
       </main>
 
@@ -146,8 +149,9 @@ function NoteControl({ note, onOpen }: { note: string; onOpen: () => void }) {
         type="button"
         onClick={onOpen}
         className={
-          'mt-3 flex min-h-12 items-center gap-2 self-start rounded-chunky px-1 text-[16px] font-black text-brand-d ' +
-          'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d enabled:active:opacity-70'
+          '-ml-1 mt-3 flex min-h-12 items-center gap-2 self-start rounded-chunky px-2 text-[16px] font-black text-brand-d ' +
+          'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d ' +
+          'enabled:hover:bg-brand-l enabled:active:opacity-70 motion-safe:transition-colors'
         }
       >
         <PencilIcon />
@@ -161,8 +165,9 @@ function NoteControl({ note, onOpen }: { note: string; onOpen: () => void }) {
       onClick={onOpen}
       className={
         'mt-3 flex w-full items-start justify-between gap-3 rounded-chunky border-2 border-b-5 border-grey bg-white px-3.5 py-3 text-left ' +
+        'enabled:hover:border-grey-d enabled:hover:bg-[#fafafa] ' +
         'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-brand-d ' +
-        'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-transform'
+        'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-[translate,background-color,border-color]'
       }
     >
       <span className="min-w-0">
@@ -173,6 +178,93 @@ function NoteControl({ note, onOpen }: { note: string; onOpen: () => void }) {
         <PencilIcon />
         Aanpassen
       </span>
+    </button>
+  );
+}
+
+const photoCount = (n: number) => (n === 1 ? '1 foto' : `${n} foto's`);
+
+/**
+ * After Nee: what is wrong, the date and the photos, as the Opmerking card shows a note.
+ * The whole card opens the Nee sheet again. Something missing is said in words, not colour only.
+ */
+function NeeSummary({
+  details,
+  incomplete,
+  onOpen,
+}: {
+  details: NeeDetails | undefined;
+  incomplete: boolean;
+  onOpen: () => void;
+}) {
+  const comment = details?.comment.trim() ?? '';
+  const date = details?.actionBefore ?? '';
+  const photos = details?.photos ?? [];
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        'mt-3 flex w-full flex-col gap-2 rounded-chunky border-2 border-b-5 bg-white px-3.5 py-3 text-left',
+        incomplete ? 'border-coral' : 'border-grey enabled:hover:border-grey-d',
+        'enabled:hover:bg-[#fafafa] focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-brand-d',
+        'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-[translate,background-color,border-color]',
+        'motion-safe:animate-rise',
+      )}
+    >
+      <span className="flex w-full items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-[14px] font-extrabold text-sub">Wat is er mis?</span>
+          <span className="line-clamp-3 block text-[16px] font-bold break-words text-ink">
+            {comment || <span className="text-sub">Nog niet ingevuld</span>}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 text-[15px] font-black text-brand-d">
+          <PencilIcon />
+          Aanpassen
+        </span>
+      </span>
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[15px] font-extrabold text-ink">
+        <span className="flex items-center gap-1.5">
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[18px] shrink-0 text-sub" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="18" height="16" rx="3" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+          {date ? (
+            <>
+              <span className="sr-only">{`Opgelost vóór ${formatDayLong(date)}`}</span>
+              <span aria-hidden="true">{`Vóór ${formatDayWeekday(date)}`}</span>
+            </>
+          ) : (
+            <span className="text-sub">Geen datum</span>
+          )}
+        </span>
+        {photos.length > 0 && (
+          <span className="flex items-center gap-1.5">
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[18px] shrink-0 text-sub" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
+            {photoCount(photos.length)}
+          </span>
+        )}
+      </span>
+      {photos.length > 0 && (
+        <span aria-hidden="true" className="flex gap-2">
+          {photos.map((src, i) => (
+            <img key={i} src={src} alt="" className="size-12 rounded-lg border-2 border-grey object-cover" />
+          ))}
+        </span>
+      )}
+      {incomplete && (
+        <span className="flex items-center gap-1.5 text-[15px] font-extrabold text-coral-d">
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7.5v5.5M12 16.5v.01" />
+          </svg>
+          Nog niet compleet. Tik om af te maken.
+        </span>
+      )}
     </button>
   );
 }

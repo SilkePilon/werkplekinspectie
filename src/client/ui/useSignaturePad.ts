@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import SignaturePad from 'signature_pad';
-import { LIMITS } from '@shared/schema';
+import { LIMITS } from '@shared/limits';
 
 // Ink colour, and widths that look like a pen when drawn with a finger.
 const PEN = { penColor: '#26193c', minWidth: 1.5, maxWidth: 4 } as const;

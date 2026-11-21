@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Writable } from 'node:stream';
+import { gzipSync } from 'node:zlib';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { buildApp, type AppDeps } from '../../src/server/app.js';
@@ -377,6 +378,63 @@ describe('POST /api/inspecties', () => {
     const res = await post(app, JSON.stringify({ ...makeSubmission(), goodPractice: 'x'.repeat(12_000_001) }));
     expect(res.statusCode).toBe(413);
     expect(res.json()).toEqual({ status: 'te_groot' });
+    expect(mailer.sent).toHaveLength(0);
+  });
+});
+
+describe('POST /api/inspecties with a gzipped body', () => {
+  function postEncoded(app: FastifyInstance, payload: Buffer, encoding: string) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/inspecties',
+      headers: { origin: cfg.publicOrigin, 'content-type': 'application/json', 'content-encoding': encoding },
+      payload,
+    });
+  }
+
+  test('is inflated, checked and mailed like a plain one', async () => {
+    const { app, mailer, renderPdf } = await setup();
+    const sub = makeSubmission({}, { neeIds: ['4B'], photosPerNee: 2 });
+    const res = await postEncoded(app, gzipSync(JSON.stringify(sub)), 'gzip');
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ status: 'verzonden' });
+    expect(renderPdf).toHaveBeenCalledWith(sub, cfg.branding, undefined, undefined);
+    expect(mailer.sent).toHaveLength(1);
+  });
+
+  test('Content-Encoding identity is the plain body', async () => {
+    const { app, mailer } = await setup();
+    const res = await postEncoded(app, Buffer.from(JSON.stringify(makeSubmission())), 'identity');
+    expect(res.statusCode).toBe(200);
+    expect(mailer.sent).toHaveLength(1);
+  });
+
+  test('a gzip bomb stops at the body limit: 413 te_groot, nothing mailed', async () => {
+    const { app, mailer, renderPdf } = await setup();
+    const bomb = gzipSync(JSON.stringify({ ...makeSubmission(), goodPractice: 'x'.repeat(50_000_000) }));
+    // About 50 kB on the wire, 50 MB once inflated.
+    expect(bomb.length).toBeLessThan(100_000);
+    const res = await postEncoded(app, bomb, 'gzip');
+    expect(res.statusCode).toBe(413);
+    expect(res.json()).toEqual({ status: 'te_groot' });
+    expect(renderPdf).not.toHaveBeenCalled();
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('broken gzip gives 400 ongeldig without fields', async () => {
+    const { app, mailer } = await setup();
+    const broken = gzipSync(JSON.stringify(makeSubmission())).subarray(0, 40);
+    const res = await postEncoded(app, Buffer.concat([broken, Buffer.from('not gzip at all')]), 'gzip');
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: [] });
+    expect(mailer.sent).toHaveLength(0);
+  });
+
+  test('other encodings give 415 niet_ondersteund', async () => {
+    const { app, mailer } = await setup();
+    const res = await postEncoded(app, Buffer.from(JSON.stringify(makeSubmission())), 'br');
+    expect(res.statusCode).toBe(415);
+    expect(res.json()).toEqual({ status: 'niet_ondersteund' });
     expect(mailer.sent).toHaveLength(0);
   });
 });

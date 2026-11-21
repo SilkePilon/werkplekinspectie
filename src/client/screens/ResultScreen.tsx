@@ -79,7 +79,10 @@ export function ResultScreen({
         footer={<ChunkyButton onClick={onDone}>Klaar</ChunkyButton>}
       >
         <p className="m-0 text-[17px] text-sub">De inspectie is gemaild naar de VGM-functionaris.</p>
-        <ul aria-label="Samenvatting" className="m-0 mt-[26px] grid w-full list-none grid-cols-3 gap-2 p-0">
+        <ul
+          aria-label="Samenvatting"
+          className="m-0 mt-[26px] grid w-full list-none grid-cols-3 gap-2 p-0 motion-safe:animate-[rise_300ms_300ms_var(--ease-out-soft)_both]"
+        >
           <Stat value={n.questions} label="vragen" />
           <Stat value={n.nee} label="keer Nee" nee />
           <Stat value={n.photos} label="foto's" />
@@ -185,9 +188,10 @@ function Stat({ value, label, nee = false }: { value: number; label: string; nee
 
 function SentBadge() {
   return (
-    <div aria-hidden="true" className="grid size-[118px] place-items-center rounded-full bg-brand text-white shadow-[0_8px_0_var(--color-brand-d)]">
+    <div aria-hidden="true" className="grid size-[118px] place-items-center rounded-full bg-brand text-white shadow-[0_8px_0_var(--color-brand-d)] motion-safe:animate-badge-in">
       <svg viewBox="0 0 24 24" className="size-[62px]" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 6 9 17l-5-5" />
+        {/* pathLength 1: the check draws itself once the badge has landed. */}
+        <path d="M4 12l5 5L20 6" pathLength={1} className="motion-safe:animate-draw motion-safe:[stroke-dasharray:1]" />
       </svg>
     </div>
   );
@@ -214,7 +218,7 @@ const ICONS = {
 /** Calm grey, not coral: nothing is lost, it just has not gone out yet. */
 function NotSentBadge({ icon }: { icon: keyof typeof ICONS }) {
   return (
-    <div aria-hidden="true" className="grid size-[118px] place-items-center rounded-full border-4 border-grey bg-white text-sub shadow-[0_8px_0_var(--color-grey)]">
+    <div aria-hidden="true" className="grid size-[118px] place-items-center rounded-full border-4 border-grey bg-white text-sub shadow-[0_8px_0_var(--color-grey)] motion-safe:animate-badge-in">
       <svg viewBox="0 0 24 24" className="size-14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
         {ICONS[icon]}
       </svg>

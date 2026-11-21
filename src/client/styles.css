@@ -1,5 +1,26 @@
 @import "tailwindcss";
-@import "@fontsource-variable/nunito";
+
+/*
+ * Nunito, Latin and Latin Extended only (from @fontsource-variable/nunito). The package's own
+ * CSS also declares Cyrillic and Vietnamese; the service worker would then download those too,
+ * for a Dutch app that never shows them. Other characters fall back to the system font.
+ */
+@font-face {
+  font-family: "Nunito Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 1000;
+  src: url("@fontsource-variable/nunito/files/nunito-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Nunito Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 1000;
+  src: url("@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* Design tokens (spec §6, global constraints). Light theme only. */
 @theme {
@@ -11,9 +32,12 @@
   --color-brand: #ff5800;
   --color-brand-d: #c44400;
   --color-brand-l: #fff1e8;
+  /* Hover on a mouse or trackpad: a shade darker, so white text on it only gains contrast. */
+  --color-brand-h: #e84f00;
   /* Nee and errors only: a red that stays apart from the orange (white on it 4.8:1). */
   --color-coral: #d92d20;
   --color-coral-d: #a61b12;
+  --color-coral-h: #c4271b;
   --color-roze: #fdeceb;
   /* Neutrals */
   --color-grey: #e5e5e5;
@@ -28,10 +52,27 @@
   /* Top corners of the bottom sheet */
   --radius-sheet: 22px;
 
-  --animate-sheet-in: sheet-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
-  --animate-sheet-out: sheet-out 160ms ease-in;
+  /*
+   * Motion: short and soft, one easing for things that arrive. Every animation is used behind
+   * `motion-safe:` (or the media query below), so "reduce motion" on the phone switches it off.
+   */
+  --ease-out-soft: cubic-bezier(0.2, 0.9, 0.3, 1);
+  --animate-sheet-in: sheet-in 240ms var(--ease-out-soft);
+  --animate-sheet-out: sheet-out 180ms cubic-bezier(0.4, 0, 1, 1);
   --animate-fade-in: fade-in 220ms ease-out;
-  --animate-fade-out: fade-out 160ms ease-in;
+  --animate-fade-out: fade-out 180ms ease-in;
+  /* Tablet and desktop: sheets open as a dialog in the middle of the screen. */
+  --animate-dialog-in: dialog-in 220ms var(--ease-out-soft);
+  --animate-dialog-out: dialog-out 150ms ease-in;
+  /* A choice that was just made: the icon or day pops once. */
+  --animate-pop: pop 260ms var(--ease-out-soft);
+  /* Something that appears in place: an error, the calendar, a new photo. */
+  --animate-rise: rise 200ms var(--ease-out-soft) both;
+  /* The "Verstuurd!" badge and its check mark. */
+  --animate-badge-in: badge-in 480ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  --animate-draw: draw 360ms 260ms ease-out both;
+  /* The progress bar grows from where the last screen left it (--from). */
+  --animate-progress: progress 420ms var(--ease-out-soft);
 
   @keyframes sheet-in {
     from { transform: translateY(100%); }
@@ -40,6 +81,38 @@
   @keyframes sheet-out {
     from { transform: translateY(0); }
     to { transform: translateY(100%); }
+  }
+  @keyframes dialog-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes dialog-out {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(6px) scale(0.985); }
+  }
+  @keyframes pop {
+    0% { transform: scale(0.7); }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes badge-in {
+    from { opacity: 0; transform: scale(0.6); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes draw {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes progress {
+    from { width: var(--from, 0%); }
+  }
+  @keyframes screen-in {
+    from { opacity: 0; transform: translateX(var(--screen-from, 20px)); }
+    to { opacity: 1; transform: none; }
   }
   @keyframes fade-in {
     from { opacity: 0; }
@@ -65,4 +138,37 @@
     font-size: 17px;
     line-height: 1.35;
   }
+
+  /* Tablet and desktop: the app sits as a white card on the light brand tint (as in the mail). */
+  @media (width >= 48rem) {
+    body {
+      background-color: var(--color-brand-l);
+    }
+  }
+
+  /*
+   * Tailwind 4 gives buttons the plain arrow. With a mouse, everything that can be clicked
+   * shows the hand; disabled controls keep the arrow (ChunkyButton shows not-allowed).
+   */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  label:has(input:is([type='radio'], [type='checkbox']):not(:disabled)),
+  input:is([type='date'], [type='file']):not(:disabled) {
+    cursor: pointer;
+  }
 }
+
+/*
+ * Moving between screens: the content (<main>) slides in from the side you are heading to,
+ * forward from the right and back from the left. Header and footer stay put. App sets
+ * data-nav on its root; each screen's <main> is new, so the animation runs once per step.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  [data-nav] main {
+    animation: screen-in 280ms var(--ease-out-soft) both;
+  }
+  [data-nav='back'] main {
+    --screen-from: -20px;
+  }
+}
+

@@ -41,6 +41,23 @@ export function bodyBytes(body: string): number {
   return new TextEncoder().encode(body).length;
 }
 
+/**
+ * From this size the body is sent gzipped. Base64 photos shrink by about a quarter, which on a
+ * slow mobile upload saves seconds; small bodies are sent as they are.
+ */
+export const GZIP_FROM_BYTES = 64 * 1024;
+
+/** The body gzipped by the browser itself, or null where CompressionStream is missing or fails. */
+async function gzip(body: string): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (typeof CompressionStream !== 'function') return null;
+  try {
+    const stream = new Response(body).body!.pipeThrough(new CompressionStream('gzip'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
 async function readJson(res: Response): Promise<Record<string, unknown> | null> {
   try {
     const body: unknown = await res.json();
@@ -50,28 +67,52 @@ async function readJson(res: Response): Promise<Record<string, unknown> | null> 
   }
 }
 
+/** The non-empty `fields` list of a 400 answer, if it has one. */
+function namedFields(body: Record<string, unknown> | null): string[] | undefined {
+  const fields = body?.fields;
+  return Array.isArray(fields) && fields.length > 0 && fields.every((f) => typeof f === 'string')
+    ? (fields as string[])
+    : undefined;
+}
+
 /**
  * Never throws. No network is `offline`; no answer within `timeoutMs` (default: see
- * sendTimeoutMs) is `traag`. The same-origin `Origin` header the server checks is added by
- * the browser itself.
+ * sendTimeoutMs) is `traag`. A large body goes gzipped (`gzip: false` turns that off). The
+ * same-origin `Origin` header the server checks is added by the browser itself.
  */
-export async function submitInspection(s: Submission, opts: { timeoutMs?: number } = {}): Promise<SubmitResult> {
-  const body = submissionBody(s);
+export async function submitInspection(
+  s: Submission,
+  opts: { timeoutMs?: number; gzip?: boolean } = {},
+): Promise<SubmitResult> {
+  const json = submissionBody(s);
+  const size = bodyBytes(json);
+  // Packing happens on the phone, before the clock for the upload starts.
+  const packed = opts.gzip !== false && size >= GZIP_FROM_BYTES ? await gzip(json) : null;
   const ctrl = new AbortController();
   let timedOut = false;
+  // The timeout still allows for the unpacked size: a little extra room on a slow line.
   const timer = setTimeout(() => {
     timedOut = true;
     ctrl.abort();
-  }, opts.timeoutMs ?? sendTimeoutMs(bodyBytes(body)));
+  }, opts.timeoutMs ?? sendTimeoutMs(size));
+  const post = (gz: Uint8Array<ArrayBuffer> | null) =>
+    fetch('/api/inspecties', {
+      method: 'POST',
+      headers: gz
+        ? { 'content-type': 'application/json', 'content-encoding': 'gzip' }
+        : { 'content-type': 'application/json' },
+      body: gz ?? json,
+      signal: ctrl.signal,
+    });
   try {
     let res: Response;
     try {
-      res = await fetch('/api/inspecties', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body,
-        signal: ctrl.signal,
-      });
+      res = await post(packed);
+      // A server or proxy that cannot read gzip answers 415, or 400 without naming a field (a
+      // real validation error always names one): then once more, unpacked.
+      if (packed && (res.status === 415 || (res.status === 400 && namedFields(await readJson(res.clone())) === undefined))) {
+        res = await post(null);
+      }
     } catch {
       return { outcome: timedOut ? 'traag' : 'offline' };
     }
@@ -81,10 +122,8 @@ export async function submitInspection(s: Submission, opts: { timeoutMs?: number
         // and taking that as sent would drop the inspection from the outbox.
         return (await readJson(res))?.status === 'verzonden' ? { outcome: 'verzonden' } : { outcome: 'onbekend' };
       case 400: {
-        const fields = (await readJson(res))?.fields;
-        return Array.isArray(fields) && fields.every((f) => typeof f === 'string')
-          ? { outcome: 'ongeldig', fields }
-          : { outcome: 'ongeldig' };
+        const fields = namedFields(await readJson(res));
+        return fields ? { outcome: 'ongeldig', fields } : { outcome: 'ongeldig' };
       }
       case 413:
         return { outcome: 'te_groot' };

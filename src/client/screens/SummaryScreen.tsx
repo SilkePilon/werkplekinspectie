@@ -82,7 +82,7 @@ export function SummaryScreen({
         {tooLarge && (
           <p
             role="alert"
-            className="mt-2 mb-0 rounded-chunky border-2 border-coral bg-roze px-3.5 py-3 text-[15px] font-extrabold text-coral-d"
+            className="mt-2 mb-0 rounded-chunky border-2 border-coral bg-roze px-3.5 py-3 text-[15px] font-extrabold text-coral-d motion-safe:animate-rise"
           >
             De inspectie is te groot om te versturen. Verwijder een paar foto&apos;s.
           </p>
@@ -237,7 +237,7 @@ function NeeCard({ draft, id, text, incomplete, highlighted, markRef, onEdit }: 
           type="button"
           aria-describedby={titleId}
           onClick={() => onEdit(id)}
-          className="-my-2 -mr-2 flex min-h-11 items-center gap-1 rounded-chunky px-2 text-[15px] font-black text-brand-d focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d"
+          className="-my-2 -mr-2 flex min-h-11 items-center gap-1 rounded-chunky px-2 text-[15px] font-black text-brand-d hover:bg-white focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d motion-safe:transition-colors"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 20h9" />
@@ -291,17 +291,18 @@ function Row({ title, highlighted, markRef, onClick, children }: RowProps) {
       ref={highlighted ? (markRef as Ref<HTMLButtonElement>) : undefined}
       onClick={onClick}
       className={cn(
-        'flex w-full items-center justify-between gap-3 rounded-chunky border-2 border-b-5 bg-white px-3.5 py-3 text-left',
-        highlighted ? 'border-coral' : 'border-grey',
+        'group flex w-full items-center justify-between gap-3 rounded-chunky border-2 border-b-5 bg-white px-3.5 py-3 text-left',
+        highlighted ? 'border-coral' : 'border-grey hover:border-grey-d',
+        'hover:bg-[#fafafa]',
         'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-brand-d',
-        'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-transform',
+        'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-[translate,background-color,border-color]',
       )}
     >
       <span className="min-w-0">
         <span className="block text-[17px] font-black">{title}</span>
         <span className="block text-[14px] font-bold text-sub">{children}</span>
       </span>
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[22px] shrink-0 text-mute" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[22px] shrink-0 text-mute group-hover:text-sub motion-safe:transition-[color,translate] motion-safe:group-hover:translate-x-0.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
         <path d="m9 18 6-6-6-6" />
       </svg>
     </button>

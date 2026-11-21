@@ -196,7 +196,7 @@ pdfkit, **liggend A4**, nagebouwd naar het Word-formulier:
 - **Telefoon:** concept (antwoorden, foto's, handtekening) in IndexedDB, automatisch opgeslagen na elke tik.
   Gewist direct na een geslaagde verzending, via *Weggooien*, of automatisch na 14 dagen. De naam van de
   monteur blijft apart bewaard voor de volgende keer.
-- **Foto's:** op de telefoon verkleind (max. 1600px, JPEG ~0.7) — dit verwijdert ook EXIF/GPS. Max. 3 per
+- **Foto's:** op de telefoon verkleind (max. 1280px, JPEG ~0.7) — dit verwijdert ook EXIF/GPS. Max. 3 per
   Nee-punt, max. 15 totaal.
 - Service worker cachet nooit `/api/*`.
 
@@ -264,7 +264,7 @@ Ontbrekende verplichte variabelen → container start niet, met duidelijke meldi
 
 Tijdens het bouwen zijn deze punten bewust anders of scherper ingevuld dan hierboven:
 
-- **Foto's alleen JPEG.** De app maakt van elke foto een JPEG (max. 1600px, ~0,55 MB); de server weigert andere formaten.
+- **Foto's alleen JPEG.** De app maakt van elke foto een JPEG (max. 1280px, ~0,4 MB); de server weigert andere formaten.
   De handtekening is een PNG van 8 bit, niet-interlaced, max. 2400×1600 px. Foto's mogen max. 2000 px per zijde zijn.
 - **Bescherming tegen "zip-bommen".** De server controleert PNG's met dezelfde parser als de PDF-bibliotheek en pakt
   de pixeldata met een harde bovengrens uit, zodat een klein bestand de server niet kan laten vastlopen.

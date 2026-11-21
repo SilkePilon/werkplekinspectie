@@ -1,6 +1,7 @@
+import { gunzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Submission } from '@shared/schema';
-import { sendTimeoutMs, submitInspection } from '../../src/client/api/submit';
+import { GZIP_FROM_BYTES, sendTimeoutMs, submitInspection } from '../../src/client/api/submit';
 
 const SUB = { submissionId: '6a1f0c1e-0000-4000-8000-000000000001', project: 'Voorbeeld B.V.' } as Submission;
 
@@ -115,7 +116,7 @@ test('the default timeout grows with the body: a 2.5 MB inspection gets about 13
   const limit = sendTimeoutMs(new TextEncoder().encode(JSON.stringify(big)).length);
   expect(limit).toBeGreaterThan(130_000);
   let result: unknown;
-  void submitInspection(big).then((r) => (result = r));
+  void submitInspection(big, { gzip: false }).then((r) => (result = r));
   await vi.advanceTimersByTimeAsync(limit - 1);
   expect(result).toBeUndefined();
   await vi.advanceTimersByTimeAsync(1);
@@ -126,7 +127,9 @@ test('the default timeout is never longer than 180 s', async () => {
   vi.useFakeTimers();
   hangingFetch();
   let result: unknown;
-  void submitInspection({ ...SUB, project: 'x'.repeat(11_000_000) } as Submission).then((r) => (result = r));
+  void submitInspection({ ...SUB, project: 'x'.repeat(11_000_000) } as Submission, { gzip: false }).then(
+    (r) => (result = r),
+  );
   await vi.advanceTimersByTimeAsync(179_999);
   expect(result).toBeUndefined();
   await vi.advanceTimersByTimeAsync(1);
@@ -142,4 +145,49 @@ test('a small inspection still gets 30 s', async () => {
   expect(result).toBeUndefined();
   await vi.advanceTimersByTimeAsync(1_000);
   expect(result).toEqual({ outcome: 'traag' });
+});
+
+describe('large bodies go gzipped', () => {
+  const BIG = { ...SUB, project: 'x'.repeat(GZIP_FROM_BYTES) } as Submission;
+  const unpack = (init: RequestInit | undefined) =>
+    JSON.parse(gunzipSync(init?.body as Uint8Array).toString('utf8')) as unknown;
+
+  test('from GZIP_FROM_BYTES on: Content-Encoding gzip, and the body inflates to the submission', async () => {
+    fetchMock.mockResolvedValue(json(200, { status: 'verzonden' }));
+    expect(await submitInspection(BIG)).toEqual({ outcome: 'verzonden' });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init?.headers).toEqual({ 'content-type': 'application/json', 'content-encoding': 'gzip' });
+    expect(init?.body).toBeInstanceOf(Uint8Array);
+    expect((init?.body as Uint8Array).length).toBeLessThan(GZIP_FROM_BYTES / 10);
+    expect(unpack(init)).toEqual(BIG);
+  });
+
+  test('below GZIP_FROM_BYTES, or with gzip: false, the JSON goes as it is', async () => {
+    fetchMock.mockResolvedValue(json(200, { status: 'verzonden' }));
+    await submitInspection(SUB);
+    await submitInspection(BIG, { gzip: false });
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init?.headers).toEqual({ 'content-type': 'application/json' });
+      expect(typeof init?.body).toBe('string');
+    }
+  });
+
+  test.each([
+    ['415', () => json(415, { status: 'niet_ondersteund' })],
+    ['400 naming no field', () => json(400, { status: 'ongeldig', fields: [] })],
+    ['400 without a readable body', () => new Response('<html>', { status: 400 })],
+  ])('a server that cannot read gzip (%s): sent once more, unpacked', async (_name, refusal) => {
+    fetchMock.mockResolvedValueOnce(refusal()).mockResolvedValueOnce(json(200, { status: 'verzonden' }));
+    expect(await submitInspection(BIG)).toEqual({ outcome: 'verzonden' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, retry] = fetchMock.mock.calls[1]!;
+    expect(retry?.headers).toEqual({ 'content-type': 'application/json' });
+    expect(JSON.parse(retry?.body as string)).toEqual(BIG);
+  });
+
+  test('a 400 that names fields is a real refusal: not sent again', async () => {
+    fetchMock.mockResolvedValue(json(400, { status: 'ongeldig', fields: ['answers.4B.comment'] }));
+    expect(await submitInspection(BIG)).toEqual({ outcome: 'ongeldig', fields: ['answers.4B.comment'] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

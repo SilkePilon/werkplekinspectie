@@ -13,7 +13,8 @@ export interface TopBarProps {
 
 const iconButton =
   'grid size-11 shrink-0 place-items-center rounded-chunky text-sub ' +
-  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d enabled:active:opacity-70';
+  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d ' +
+  'enabled:hover:bg-grey/60 enabled:hover:text-ink enabled:active:opacity-70 motion-safe:transition-colors';
 
 /** Back arrow, progress bar and close button at the top of every inspection screen. */
 export function TopBar({ progress, label, onBack, onClose }: TopBarProps) {

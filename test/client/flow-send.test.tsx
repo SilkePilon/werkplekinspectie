@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto';
+import { gunzipSync } from 'node:zlib';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { clear, createStore } from 'idb-keyval';
@@ -66,7 +67,11 @@ const offline = async () => {
 function posts(): Submission[] {
   return fetchMock.mock.calls
     .filter(([url]) => url === '/api/inspecties')
-    .map(([, init]) => JSON.parse(init?.body as string) as Submission);
+    .map(([, init]) => {
+      // Large bodies are gzipped by the app.
+      const body = init?.body instanceof Uint8Array ? gunzipSync(init.body).toString('utf8') : (init?.body as string);
+      return JSON.parse(body) as Submission;
+    });
 }
 
 beforeEach(async () => {

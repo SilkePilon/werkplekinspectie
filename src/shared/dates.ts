@@ -67,3 +67,59 @@ export function formatDateLong(iso: string): string {
   const p = amsterdamParts(iso);
   return `${Number(p.day)} ${MONTHS[Number(p.month) - 1] ?? ''} ${p.year}`;
 }
+
+// Plain calendar dates (YYYY-MM-DD), counted in UTC so no daylight-saving shift can move a day.
+const WEEKDAYS = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+const MONTHS_LONG = [
+  'januari', 'februari', 'maart', 'april', 'mei', 'juni',
+  'juli', 'augustus', 'september', 'oktober', 'november', 'december',
+];
+
+function dayToUtc(isoDate: string): Date {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!));
+}
+
+function utcToDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/** YYYY-MM-DD plus `n` days (n may be negative). */
+export function addDays(isoDate: string, n: number): string {
+  const date = dayToUtc(isoDate);
+  date.setUTCDate(date.getUTCDate() + n);
+  return utcToDay(date);
+}
+
+/** YYYY-MM-DD plus `n` months; 31 jan + 1 month is 28 (or 29) feb, not 3 mar. */
+export function addMonths(isoDate: string, n: number): string {
+  const date = dayToUtc(isoDate);
+  const day = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + n);
+  const last = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, last));
+  return utcToDay(date);
+}
+
+/** 0 = maandag … 6 = zondag: Dutch weeks start on Monday. */
+export function weekdayIndex(isoDate: string): number {
+  return (dayToUtc(isoDate).getUTCDay() + 6) % 7;
+}
+
+/** "vrijdag 27 november 2026". */
+export function formatDayLong(isoDate: string): string {
+  const date = dayToUtc(isoDate);
+  return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS_LONG[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
+/** "vr 27 nov". */
+export function formatDayWeekday(isoDate: string): string {
+  return `${WEEKDAYS[dayToUtc(isoDate).getUTCDay()]!.slice(0, 2)} ${formatDayShort(isoDate)}`;
+}
+
+/** "november 2026" for the month that holds the date. */
+export function formatMonth(isoDate: string): string {
+  const date = dayToUtc(isoDate);
+  return `${MONTHS_LONG[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}

@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { LIMITS } from '@shared/schema';
+import { LIMITS } from '@shared/limits';
 import type { DraftDispatch } from '../App';
 import type { Draft } from '../state/draft';
 import { ChunkyButton } from '../ui/ChunkyButton';

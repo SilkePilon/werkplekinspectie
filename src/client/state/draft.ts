@@ -1,7 +1,8 @@
 // The in-progress inspection on the phone and the pure functions that change it.
 import { amsterdamDateKey } from '@shared/dates';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
-import { LIMITS, type Answer, type Submission } from '@shared/schema';
+import { LIMITS } from '@shared/limits';
+import type { Answer, Submission } from '@shared/schema';
 
 export type AnswerValue = 'ja' | 'nee' | 'nvt';
 

@@ -55,26 +55,26 @@ export function SignatureScreen({ draft, dispatch, onSend, busy, onBack, onClose
           <canvas
             ref={canvasRef}
             role="img"
-            aria-label="Tekenvlak: teken hier met je vinger"
-            className="absolute inset-0 size-full touch-none rounded-chunky"
+            aria-label="Tekenvlak: teken hier met je vinger, pen of muis"
+            className="absolute inset-0 size-full cursor-crosshair touch-none rounded-chunky"
           />
           <button
             type="button"
             onClick={redo}
             disabled={isEmpty}
-            className="absolute top-1 right-1 z-10 min-h-11 rounded-chunky px-3 text-[15px] font-black text-brand-d disabled:text-mute focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d"
+            className="absolute top-1 right-1 z-10 min-h-11 rounded-chunky px-3 text-[15px] font-black text-brand-d enabled:hover:bg-brand-l disabled:text-mute focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d motion-safe:transition-colors"
           >
             Opnieuw
           </button>
         </div>
 
         {tooBig && (
-          <p role="alert" className="mt-3 mb-0 text-[15px] font-extrabold text-coral-d">
+          <p role="alert" className="mt-3 mb-0 text-[15px] font-extrabold text-coral-d motion-safe:animate-rise">
             Je handtekening is te groot. Tik op Opnieuw en teken hem nog een keer.
           </p>
         )}
 
-        <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-chunky py-1 text-[16px] has-focus-visible:outline-solid has-focus-visible:outline-3 has-focus-visible:outline-offset-3 has-focus-visible:outline-brand-d">
+        <label className="group mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-chunky py-1 text-[16px] has-focus-visible:outline-solid has-focus-visible:outline-3 has-focus-visible:outline-offset-3 has-focus-visible:outline-brand-d">
           <input
             type="checkbox"
             checked={draft.declaration}
@@ -83,7 +83,7 @@ export function SignatureScreen({ draft, dispatch, onSend, busy, onBack, onClose
           />
           <span
             aria-hidden="true"
-            className="grid size-7 shrink-0 place-items-center rounded-[8px] border-2 border-grey-d bg-white text-transparent peer-checked:border-brand peer-checked:bg-brand peer-checked:text-white"
+            className="grid size-7 shrink-0 place-items-center rounded-[8px] border-2 border-grey-d bg-white text-transparent peer-not-checked:group-hover:border-sub peer-checked:border-brand peer-checked:bg-brand peer-checked:text-white motion-safe:transition-colors motion-safe:peer-checked:animate-pop"
           >
             <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 6 9 17l-5-5" />
@@ -97,6 +97,10 @@ export function SignatureScreen({ draft, dispatch, onSend, busy, onBack, onClose
         <ChunkyButton busy={busy} disabled={isEmpty || !draft.declaration} onClick={send}>
           Verstuur inspectie
         </ChunkyButton>
+        {/* Always in the page, so screen readers announce the text when sending starts. */}
+        <p role="status" className="mt-2 mb-0 min-h-[1lh] text-center text-[15px] text-sub">
+          {busy ? "Bezig met versturen. Met veel foto's kan dit even duren." : ''}
+        </p>
       </footer>
     </>
   );

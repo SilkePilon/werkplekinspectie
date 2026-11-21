@@ -1,7 +1,8 @@
 import { useId, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate } from '@shared/dates';
 import { QUESTION_IDS } from '@shared/questions';
-import { LIMITS, type Submission } from '@shared/schema';
+import { LIMITS } from '@shared/limits';
+import type { Submission } from '@shared/schema';
 import type { Draft } from '../state/draft';
 import { useIosHint } from '../state/useIosHint';
 import { ChunkyButton } from '../ui/ChunkyButton';

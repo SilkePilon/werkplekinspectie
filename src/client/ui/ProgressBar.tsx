@@ -1,4 +1,11 @@
+import { useEffect, useState, type CSSProperties } from 'react';
 import { cn } from './cn';
+
+/**
+ * Where the bar stood on the screen before. Each screen has its own top bar, so the bar is new
+ * on every step: it grows from here instead of jumping.
+ */
+let lastPercent = 0;
 
 export interface ProgressBarProps {
   /** Progress from 0 to 1; values outside are clamped. */
@@ -10,6 +17,10 @@ export interface ProgressBarProps {
 
 export function ProgressBar({ value, label, className }: ProgressBarProps) {
   const percent = Math.round(Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0)) * 100);
+  const [from] = useState(() => lastPercent);
+  useEffect(() => {
+    lastPercent = percent;
+  }, [percent]);
   return (
     <div
       role="progressbar"
@@ -23,11 +34,12 @@ export function ProgressBar({ value, label, className }: ProgressBarProps) {
       <div
         className={cn(
           'relative h-full rounded-full bg-brand motion-safe:transition-[width] motion-safe:duration-300',
+          from !== percent && 'motion-safe:animate-progress',
           // The light stripe on top, as in the mockup.
           "after:absolute after:inset-x-2 after:top-1 after:h-1 after:rounded-[9px] after:bg-white/28 after:content-['']",
           percent < 8 && 'after:hidden',
         )}
-        style={{ width: `${percent}%` }}
+        style={{ width: `${percent}%`, '--from': `${from}%` } as CSSProperties}
       />
     </div>
   );

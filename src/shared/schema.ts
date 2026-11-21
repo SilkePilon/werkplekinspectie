@@ -2,23 +2,10 @@
 // magic-byte checks on photos and signature happen on the server.
 import { z } from 'zod';
 import { amsterdamDateKey } from './dates.js';
+import { LIMITS } from './limits.js';
 import { QUESTION_IDS, type QuestionId } from './questions.js';
 
-/** Every text field: at most 250 characters, on the phone and on the server. */
-const TEXT_MAX = 250;
-
-export const LIMITS = {
-  monteur: TEXT_MAX,
-  project: TEXT_MAX,
-  projectnummer: TEXT_MAX,
-  comment: TEXT_MAX,
-  goodPractice: TEXT_MAX,
-  photosPerItem: 3,
-  photosTotal: 15,
-  photoBytes: 1_500_000,
-  signatureBytes: 300_000,
-  bodyBytes: 12_000_000,
-} as const;
+export { LIMITS };
 
 export type Answer =
   // Ja and Nvt may carry an optional comment; Nee always has one.

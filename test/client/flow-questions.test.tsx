@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { clear, createStore } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { amsterdamDateKey } from '@shared/dates';
+import { addDays, amsterdamDateKey, formatDayLong } from '@shared/dates';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
 import type { Submission } from '@shared/schema';
 import { App } from '../../src/client/App';
@@ -21,6 +21,9 @@ const Q1B = 'Weet je wat je moet doen bij een noodgeval op deze plek?';
 const Q1C = 'Heb je een veiligheidsinstructie van de opdrachtgever gekregen?';
 const Q9B = 'Is er iemand met een EHBO-diploma?';
 const FUTURE = '2099-12-31';
+const todayKey = () => amsterdamDateKey(new Date().toISOString());
+/** Today's day in the calendar of the open Nee sheet. */
+const todayButton = (dialog: HTMLElement) => within(dialog).getByRole('button', { name: /, vandaag$/ });
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==';
 
 type Fetch = (input: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
@@ -131,12 +134,20 @@ describe('question flow', () => {
     expect(screen.getByText(Q1B)).toBeTruthy();
 
     await user.type(within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }), 'Geen plan aanwezig');
-    fireEvent.change(within(dialog).getByLabelText('Opgelost vóór'), { target: { value: FUTURE } });
+    await user.click(todayButton(dialog));
     await user.click(button('Doorgaan', dialog));
     // Doorgaan closes the sheet; Volgende moves on.
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByText(Q1B)).toBeTruthy();
     expect(radio('Nee').checked).toBe(true);
+    // What was filled in shows on the question, so it is clear it is kept; the card reopens the sheet.
+    const card = screen.getByRole('button', { name: /^Wat is er mis\?/ });
+    expect(card.textContent).toContain('Geen plan aanwezig');
+    expect(card.textContent).toContain(`Opgelost vóór ${formatDayLong(todayKey())}`);
+    expect(card.textContent).not.toContain('Nog niet compleet');
+    await user.click(card);
+    expect(neeDialog()).toBeTruthy();
+    await user.click(button('Doorgaan', neeDialog()));
     await user.click(button('Volgende'));
     expect(screen.getByText(Q1C)).toBeTruthy();
 
@@ -145,7 +156,7 @@ describe('question flow', () => {
     await waitFor(async () => {
       const saved = await loadDraft();
       expect(saved?.answers).toEqual({ '1A': 'ja', '1B': 'nee' });
-      expect(saved?.nee['1B']).toEqual({ comment: 'Geen plan aanwezig', actionBefore: FUTURE, photos: [] });
+      expect(saved?.nee['1B']).toEqual({ comment: 'Geen plan aanwezig', actionBefore: todayKey(), photos: [] });
     });
 
     unmount();
@@ -279,23 +290,48 @@ describe('question flow', () => {
     expect(neeDialog()).toBeTruthy();
   });
 
-  test('the date picker starts at the inspection day; earlier dates are refused', async () => {
+  test('a Nee sheet closed before it is complete: the card says so, and tapping it reopens the sheet', async () => {
+    const user = setup();
+    await seed({});
+    await resume(user);
+    await user.click(screen.getByText('Nee'));
+    await user.type(within(neeDialog()).getByRole('textbox', { name: 'Wat is er mis?' }), 'Kabel los');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const card = screen.getByRole('button', { name: /^Wat is er mis\?/ });
+    expect(card.textContent).toContain('Kabel los');
+    expect(card.textContent).toContain('Geen datum');
+    expect(card.textContent).toContain('Nog niet compleet');
+    await user.click(card);
+    expect(neeDialog()).toBeTruthy();
+  });
+
+  test('the date picker: a calendar from today on; earlier days cannot be chosen', async () => {
     const user = setup();
     const d = await seed({});
+    const min = amsterdamDateKey(d.startedAt);
     await resume(user);
     await user.click(screen.getByText('Nee'));
     const dialog = neeDialog();
-    const date = within(dialog).getByLabelText('Opgelost vóór') as HTMLInputElement;
-    expect(date.type).toBe('date');
-    expect(date.min).toBe(amsterdamDateKey(d.startedAt));
+    expect(within(dialog).getByRole('group', { name: 'Opgelost vóór' })).toBeTruthy();
+    const grid = within(dialog).getByRole('grid');
+    expect(within(dialog).getByRole('button', { name: 'Vorige maand' })).toHaveProperty('disabled', true);
+    const today = todayButton(dialog);
+    expect(today.getAttribute('data-date')).toBe(min);
+    // A day before today is there but cannot be chosen; the arrow keys stop at today.
+    const before = grid.querySelector<HTMLButtonElement>(`[data-date="${addDays(min, -1)}"]`);
+    if (before) {
+      expect(before.getAttribute('aria-disabled')).toBe('true');
+      await user.click(before);
+      expect(grid.querySelector('[aria-selected="true"]')).toBeNull();
+    }
+    today.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(today);
 
     await user.type(within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }), 'Kapot');
-    fireEvent.change(date, { target: { value: '2000-01-01' } });
-    await user.click(button('Doorgaan', dialog));
-    expect(within(dialog).getByText('Kies een datum vanaf vandaag.')).toBeTruthy();
-    expect(screen.getByText(Q1A)).toBeTruthy();
-
-    fireEvent.change(date, { target: { value: amsterdamDateKey(d.startedAt) } });
+    await user.click(today);
+    expect(today.closest('td')!.getAttribute('aria-selected')).toBe('true');
     await user.click(button('Doorgaan', dialog));
     expect(screen.queryByRole('dialog')).toBeNull();
     await user.click(button('Volgende'));
@@ -311,7 +347,7 @@ describe('question flow', () => {
     const comment = within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }) as HTMLTextAreaElement;
     expect(comment.maxLength).toBe(250);
     fireEvent.change(comment, { target: { value: '   ' } });
-    fireEvent.change(within(dialog).getByLabelText('Opgelost vóór'), { target: { value: FUTURE } });
+    await user.click(todayButton(dialog));
     await user.click(button('Doorgaan', dialog));
     expect(within(dialog).getByText('Schrijf kort op wat er mis is.')).toBeTruthy();
     expect(within(dialog).queryByText(/tekens over/)).toBeNull();
@@ -529,12 +565,12 @@ describe('photos', () => {
 
     for (let i = 0; i < 3; i++) await user.upload(input, file());
     await waitFor(() => expect(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(3));
-    expect(button('Foto', dialog).disabled).toBe(true);
+    expect(button('Foto toevoegen', dialog).disabled).toBe(true);
     expect(within(dialog).getByText("Maximaal 3 foto's per vraag.")).toBeTruthy();
 
     await user.click(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })[0]!);
     expect(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(2);
-    expect(button('Foto', dialog).disabled).toBe(false);
+    expect(button('Foto toevoegen', dialog).disabled).toBe(false);
     await tick(300);
     await waitFor(async () => expect((await loadDraft())?.nee['1A']?.photos).toEqual([PHOTO, PHOTO]));
   });
@@ -548,7 +584,7 @@ describe('photos', () => {
     );
     const { dialog } = await openSheet(user);
     expect(screen.getByText('Is de werkplek veilig en goed afgezet?')).toBeTruthy();
-    expect(button('Foto', dialog).disabled).toBe(true);
+    expect(button('Foto toevoegen', dialog).disabled).toBe(true);
     expect(within(dialog).getByText("Maximaal 15 foto's per inspectie.")).toBeTruthy();
   });
 
@@ -560,7 +596,7 @@ describe('photos', () => {
       { '1A': done('a', three), '1B': done('b', three), '1C': done('c', three), '1D': done('d', three), '2A': done('e', three) },
     );
     const { dialog } = await openSheet(user);
-    expect(button('Foto', dialog).disabled).toBe(false);
+    expect(button('Foto toevoegen', dialog).disabled).toBe(false);
     expect(within(dialog).queryByText(/Maximaal/)).toBeNull();
   });
 

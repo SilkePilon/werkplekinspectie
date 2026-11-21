@@ -71,8 +71,10 @@ export function AnswerGroup({ name, legend, hideLegend = false, value, onChange,
                 'relative flex min-h-[62px] cursor-pointer select-none items-center gap-3.5 rounded-chunky px-4 py-2',
                 'border-2 border-b-5 border-grey bg-white text-[20px] font-extrabold leading-tight text-ink',
                 'has-focus-visible:outline-solid has-focus-visible:outline-3 has-focus-visible:outline-offset-3 has-focus-visible:outline-brand-d',
-                'motion-safe:transition-colors',
-                selected && opt.on,
+                // Pressing sinks it onto its bottom edge, like the buttons.
+                'active:translate-y-[3px] active:border-b-2',
+                'motion-safe:transition-[translate,background-color,border-color,color] motion-safe:duration-150',
+                selected ? opt.on : 'hover:border-grey-d hover:bg-[#fafafa]',
               )}
             >
               <input
@@ -87,7 +89,7 @@ export function AnswerGroup({ name, legend, hideLegend = false, value, onChange,
                 aria-hidden="true"
                 className={cn(
                   'grid size-[34px] shrink-0 place-items-center rounded-[10px] border-2 border-grey text-mute',
-                  selected && opt.iconOn,
+                  selected && cn(opt.iconOn, 'motion-safe:animate-pop'),
                 )}
               >
                 <svg

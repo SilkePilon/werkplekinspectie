@@ -16,17 +16,22 @@ const base =
   // Never add bare `outline-none`: in Tailwind 4 it sets --tw-outline-style to none, which also
   // hides the focus-visible ring. The explicit outline-solid keeps the ring visible.
   'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-brand-d ' +
-  'motion-safe:transition-transform ' +
+  'motion-safe:transition-[translate,background-color,border-color] motion-safe:duration-150 ' +
   'disabled:cursor-not-allowed';
 
 // The 5px bottom border gives the "press me" feel; pressing sinks the button onto it.
 const chunky = 'border-b-5 enabled:active:translate-y-[3px] enabled:active:border-b-2';
 
+// `hover:` only applies on devices that can hover (mouse, trackpad), so a tap on a phone never
+// leaves a button stuck in its hover colour.
 const variants: Record<ChunkyButtonVariant, string> = {
-  main: cn(chunky, 'bg-brand text-white border-brand-d'),
-  coral: cn(chunky, 'bg-coral text-white border-coral-d'),
-  line: cn(chunky, 'bg-white text-ink border-2 border-b-5 border-grey text-[16px]'),
-  ghost: 'bg-transparent text-brand-d text-[16px] enabled:active:opacity-70 disabled:text-mute',
+  main: cn(chunky, 'bg-brand text-white border-brand-d enabled:hover:bg-brand-h'),
+  coral: cn(chunky, 'bg-coral text-white border-coral-d enabled:hover:bg-coral-h'),
+  line: cn(
+    chunky,
+    'bg-white text-ink border-2 border-b-5 border-grey text-[16px] enabled:hover:border-grey-d enabled:hover:bg-[#fafafa]',
+  ),
+  ghost: 'bg-transparent text-brand-d text-[16px] enabled:hover:bg-brand-l enabled:active:opacity-70 disabled:text-mute',
 };
 
 // Same grey for every variant: clearly "not yet" without relying on the label colour.

@@ -23,7 +23,8 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        orientation: 'portrait',
+        // Any way round: tablets are often used in landscape, and signing is easier that way too.
+        orientation: 'any',
         theme_color: ORANGE,
         background_color: '#FFFFFF',
         icons: [

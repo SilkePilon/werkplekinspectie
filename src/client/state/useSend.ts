@@ -2,7 +2,8 @@
 // The order of the steps is what keeps work safe: see sendDraft.
 import { useCallback, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
-import { LIMITS, type Submission } from '@shared/schema';
+import { LIMITS } from '@shared/limits';
+import type { Submission } from '@shared/schema';
 import type { Screen } from '../App';
 import { bodyBytes, submissionBody, submitInspection, type SubmitOutcome } from '../api/submit';
 import { addToOutbox, clearDraft, removeFromOutbox, saveDraft } from '../storage/db';
@@ -138,9 +139,12 @@ export function useSend({ draftRef, commit, schedule, cancelAutosave, navigate, 
             queued = true;
             setStoreFailed(false);
             setOutbox((o) => [...o.filter((s) => s.submissionId !== sub.submissionId), sub]);
-            // If clearing fails, the leftover draft has the same submissionId; the server mails an id once.
-            await clearDraft().catch(() => undefined);
+            // The outbox has it now, so clearing the draft runs alongside the upload instead of
+            // before it. If clearing fails, the leftover draft has the same submissionId; the
+            // server mails an id once.
+            const cleared = clearDraft().catch(() => undefined);
             await post(sub);
+            await cleared;
             if (draftRef.current?.id === sub.submissionId) commit(null);
           } catch (err) {
             // Not expected. Until the outbox has it, the draft is the only copy: keep saving it.

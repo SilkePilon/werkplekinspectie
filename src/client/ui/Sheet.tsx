@@ -9,7 +9,7 @@ export interface SheetProps {
   onOpenChange: (open: boolean) => void;
   /** Visible heading; also the dialog's accessible name. */
   title: ReactNode;
-  /** 'nee' is the roze panel used after answering Nee. */
+  /** 'nee' marks the title with the red cross, used after answering Nee. */
   tone?: SheetTone;
   children: ReactNode;
   className?: string;
@@ -38,8 +38,12 @@ export function Sheet({ open, onOpenChange, title, tone = 'default', children, c
             'fixed inset-x-0 bottom-[var(--keyboard-inset,0px)] z-50 mx-auto w-full max-w-[480px] overflow-y-auto',
             'max-h-[min(92dvh,calc(var(--visual-height,100dvh)-24px))]',
             'rounded-t-sheet px-[18px] pt-5 pb-[calc(22px+env(safe-area-inset-bottom))] text-ink outline-none',
-            nee ? 'bg-roze' : 'bg-white',
+            'bg-white',
             'motion-safe:data-[state=open]:animate-sheet-in motion-safe:data-[state=closed]:animate-sheet-out',
+            // Tablet and desktop: a dialog in the middle of what is visible above the keyboard.
+            'md:top-0 md:my-auto md:h-fit md:max-w-[520px] md:rounded-sheet md:pb-6 md:shadow-[0_24px_60px_-12px_rgb(38_25_60/0.35)]',
+            'md:max-h-[min(calc(100dvh-4rem),calc(var(--visual-height,100dvh)-4rem))]',
+            'md:motion-safe:data-[state=open]:animate-dialog-in md:motion-safe:data-[state=closed]:animate-dialog-out',
             className,
           )}
         >

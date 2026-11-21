@@ -44,6 +44,8 @@ export type DraftDispatch = (update: DraftAction | ((d: Draft) => DraftAction | 
 
 const START: Screen = { name: 'start' };
 
+type NavDirection = 'forward' | 'back';
+
 const isQuestionId = (v: unknown): v is QuestionId => QUESTION_IDS.includes(v as QuestionId);
 
 /** history.state comes back from the browser, possibly from an older version: check it. */
@@ -123,9 +125,12 @@ export function App() {
   const [outbox, setOutbox] = useState<Submission[]>([]);
   const [screen, setScreen] = useState<Screen>(START);
   const screenRef = useRef<Screen>(START);
-  const show = useCallback((s: Screen) => {
+  // Which way the last step went; the next screen slides in from that side (styles.css).
+  const [nav, setNav] = useState<NavDirection>('forward');
+  const show = useCallback((s: Screen, direction: NavDirection) => {
     screenRef.current = s;
     setScreen(s);
+    setNav(direction);
   }, []);
   const hasLogo = useHasLogo();
   useKeyboardInset();
@@ -163,7 +168,12 @@ export function App() {
 
   useEffect(() => {
     history.replaceState({ screen: START }, '');
-    const onPop = (e: PopStateEvent) => show(screenFromState(e.state));
+    const onPop = (e: PopStateEvent) => {
+      const target = screenFromState(e.state);
+      const before = previousScreen(screenRef.current);
+      const back = target.name === 'start' || (before !== null && sameStep(before, target));
+      show(target, back ? 'back' : 'forward');
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [show]);
@@ -171,7 +181,8 @@ export function App() {
   const navigate = useCallback(
     (s: Screen) => {
       pushScreen(s, screenRef.current);
-      show(s);
+      // Back to the start screen (the X, Klaar, Later versturen) reads as going back.
+      show(s, s.name === 'start' ? 'back' : 'forward');
     },
     [show],
   );
@@ -189,7 +200,7 @@ export function App() {
       history.back();
     } else {
       history.replaceState({ screen: target }, '');
-      show(target);
+      show(target, 'back');
     }
   }, [show]);
 
@@ -243,7 +254,7 @@ export function App() {
     }
     const s: Screen = target ? { name: 'question', id: target } : { name: 'goodPractice' };
     pushScreen(s, prev);
-    show(s);
+    show(s, 'forward');
   }
 
   function discard() {
@@ -359,7 +370,16 @@ export function App() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col">
+    <div
+      data-nav={nav}
+      className={
+        // Phone: the whole screen. Tablet and desktop: a white card on the brand tint, a little
+        // wider. overflow-clip (not hidden) rounds the corners without breaking sticky footers.
+        // overflow-x-clip: a screen sliding in never makes the page scroll sideways.
+        'mx-auto flex min-h-dvh w-full max-w-[480px] flex-col overflow-x-clip bg-white ' +
+        'md:my-8 md:min-h-[calc(100dvh-4rem)] md:max-w-[560px] md:overflow-clip md:rounded-[28px] md:border-2 md:border-b-5 md:border-grey'
+      }
+    >
       {(saveFailed || send.storeFailed) && <SaveFailedAlert />}
       {body()}
     </div>
@@ -371,7 +391,7 @@ function SaveFailedAlert() {
   return (
     <div
       role="alert"
-      className="mx-[18px] mt-3 flex items-start gap-2.5 rounded-chunky border-2 border-coral bg-roze px-3.5 py-3 text-[15px] font-extrabold text-coral-d"
+      className="mx-[18px] mt-3 flex items-start gap-2.5 rounded-chunky border-2 border-coral bg-roze motion-safe:animate-rise px-3.5 py-3 text-[15px] font-extrabold text-coral-d"
     >
       <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-px size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
         <circle cx="12" cy="12" r="9" />

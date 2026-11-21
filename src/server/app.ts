@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { createGunzip } from 'node:zlib';
 import rateLimit, { normalizeIP } from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify, {
@@ -76,6 +77,27 @@ const CLIENT_ERRORS: Partial<Record<number, { status: string }>> = {
 
 /** Thrown by the rate limits so the 429 goes through the error handler. */
 const tooMany = () => Object.assign(new Error('te_veel'), { statusCode: 429 });
+
+/**
+ * The app gzips large uploads (base64 photos shrink by about a quarter). The body is inflated
+ * as it streams in; Fastify counts the inflated bytes against bodyLimit and the gzipped bytes
+ * (`receivedEncodedLength`) against Content-Length, so a gzip bomb stops at the body limit.
+ * Bodies without Content-Encoding pass as they are; other encodings are refused.
+ */
+const decodeBody: preParsingHookHandler = async (req, reply, payload) => {
+  const encoding = (req.headers['content-encoding'] ?? 'identity').trim().toLowerCase();
+  if (encoding === 'identity') return payload;
+  if (encoding !== 'gzip') throw Object.assign(new Error('niet_ondersteund'), { statusCode: 415 });
+  const gunzip = Object.assign(createGunzip(), { receivedEncodedLength: 0 });
+  payload.on('data', (chunk: Buffer) => {
+    gunzip.receivedEncodedLength += chunk.length;
+  });
+  payload.once('error', (err) => gunzip.destroy(err));
+  payload.pipe(gunzip);
+  // Once the answer is out (e.g. 413 when the inflated body grew too large), stop inflating.
+  reply.raw.once('close', () => gunzip.destroy());
+  return gunzip;
+};
 
 class MailFailedError extends Error {}
 
@@ -216,7 +238,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
   });
 
   // Hook order on the submit route: origin guard (all non-GET /api/ requests), then
-  // content type, per-IP limit, concurrency cap, global limit, honeypot, and finally the handler.
+  // content type, per-IP limit, concurrency cap, global limit, gzip decoding, honeypot, and finally the handler.
   await securityHeaders(app);
   app.addHook('onRequest', originGuard(cfg.publicOrigin));
   await app.register(rateLimit, { global: false });
@@ -267,7 +289,7 @@ export async function buildApp(cfg: Config, deps: AppDeps): Promise<FastifyInsta
     bodyLimit: LIMITS.bodyBytes,
     // @fastify/rate-limit appends its own onRequest hook after this one.
     onRequest: requireJson,
-    preParsing: [takeSubmitSlot, takeGlobalSlot],
+    preParsing: [takeSubmitSlot, takeGlobalSlot, decodeBody],
     preValidation: honeypot,
     config: {
       rateLimit: {
