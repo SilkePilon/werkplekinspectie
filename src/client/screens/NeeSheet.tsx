@@ -48,7 +48,7 @@ function validate(comment: string, date: string, minDate: string, extraPhotos: n
 
 const fieldClass =
   'block w-full rounded-chunky border-2 bg-white px-3.5 py-3 text-[17px] font-bold text-ink ' +
-  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-violet';
+  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-d';
 
 export function NeeSheet({
   open,
@@ -189,7 +189,7 @@ export function NeeSheet({
                 aria-label="Foto verwijderen"
                 className={cn(
                   'absolute -top-3.5 -right-3.5 grid size-11 place-items-center rounded-full',
-                  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-violet',
+                  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d',
                 )}
                 onClick={() => onChange({ photos: photos.filter((_, j) => j !== i) })}
               >

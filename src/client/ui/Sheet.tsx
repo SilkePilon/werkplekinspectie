@@ -26,7 +26,7 @@ export function Sheet({ open, onOpenChange, title, tone = 'default', children, c
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            'fixed inset-0 z-40 bg-violet-d/35',
+            'fixed inset-0 z-40 bg-ink/35',
             'motion-safe:data-[state=open]:animate-fade-in motion-safe:data-[state=closed]:animate-fade-out',
           )}
         />

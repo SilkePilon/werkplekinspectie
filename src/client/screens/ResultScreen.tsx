@@ -112,7 +112,7 @@ export function ResultScreen({
           </p>
         ))}
         {otherDraftOpen && (
-          <p className="m-0 mt-[18px] rounded-[14px] bg-lila px-3.5 py-3 text-[15px] font-bold text-violet">
+          <p className="m-0 mt-[18px] rounded-[14px] bg-brand-l px-3.5 py-3 text-[15px] font-bold text-brand-d">
             Maak eerst je andere inspectie af of gooi hem weg.
           </p>
         )}
@@ -137,7 +137,7 @@ export function ResultScreen({
       }
     >
       <p className="m-0 mb-1.5 text-[17px] text-sub">{NOT_SENT[outcome]}</p>
-      <p className="m-0 mt-[18px] flex items-center gap-2.5 rounded-[14px] bg-lila px-3.5 py-3 text-left text-[15px] font-bold text-violet">
+      <p className="m-0 mt-[18px] flex items-center gap-2.5 rounded-[14px] bg-brand-l px-3.5 py-3 text-left text-[15px] font-bold text-brand-d">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="size-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </svg>
@@ -185,7 +185,7 @@ function Stat({ value, label, nee = false }: { value: number; label: string; nee
 
 function SentBadge() {
   return (
-    <div aria-hidden="true" className="grid size-[118px] place-items-center rounded-full bg-violet text-white shadow-[0_8px_0_var(--color-violet-d)]">
+    <div aria-hidden="true" className="grid size-[118px] place-items-center rounded-full bg-brand text-white shadow-[0_8px_0_var(--color-brand-d)]">
       <svg viewBox="0 0 24 24" className="size-[62px]" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20 6 9 17l-5-5" />
       </svg>

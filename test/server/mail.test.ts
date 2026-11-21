@@ -213,8 +213,8 @@ describe('buildMail', () => {
 
   test('HTML uses the app colours and tables only, so Outlook keeps the layout', () => {
     const msg = buildMail(makeSubmission({}, { neeIds: ['1A'] }), PDF, CONFIG);
-    expect(msg.html).toContain('#F34842');
-    expect(msg.html).toContain('#EFE9F7');
+    expect(msg.html).toContain('#D92D20');
+    expect(msg.html).toContain('#FFF1E8');
     expect(msg.html).toContain('role="presentation"');
     expect(msg.html).not.toMatch(/display:\s*(flex|grid)/);
   });

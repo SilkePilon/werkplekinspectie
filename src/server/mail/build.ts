@@ -112,10 +112,11 @@ function renderText(s: Summary): string {
 // No web font and no images: nothing is fetched when the mail is opened.
 const C = {
   ink: '#26193C',
-  violet: '#431961',
-  lila: '#EFE9F7',
-  coral: '#F34842',
-  coralD: '#C42B24',
+  // Orange as text is the darker brand-d; the light tint is brand-l.
+  brand: '#C44400',
+  tint: '#FFF1E8',
+  coral: '#D92D20',
+  coralD: '#A61B12',
   roze: '#FDECEB',
   grey: '#E5E5E5',
   sub: '#5F5670',
@@ -124,11 +125,11 @@ const FONT = `'Nunito','Segoe UI',Roboto,Helvetica,Arial,sans-serif`;
 const BOX = 'border-collapse:separate;mso-table-lspace:0;mso-table-rspace:0';
 const CARD = `border:2px solid ${C.grey};border-bottom-width:5px;border-radius:16px;padding:12px 14px`;
 const S = {
-  body: `margin:0;padding:0;background:${C.lila};-webkit-text-size-adjust:100%`,
-  outer: `padding:24px 12px;background:${C.lila}`,
+  body: `margin:0;padding:0;background:${C.tint};-webkit-text-size-adjust:100%`,
+  outer: `padding:24px 12px;background:${C.tint}`,
   sheet: `max-width:560px;width:100%;background:#ffffff;border:2px solid ${C.grey};border-bottom-width:5px;border-radius:22px`,
   inner: `padding:24px 22px;font-family:${FONT};color:${C.ink};font-size:16px;line-height:1.4`,
-  eyebrow: `margin:0;font-size:14px;font-weight:800;color:${C.violet}`,
+  eyebrow: `margin:0;font-size:14px;font-weight:800;color:${C.brand}`,
   h1: `margin:6px 0 2px;font-size:26px;line-height:1.15;font-weight:900;color:${C.ink}`,
   meta: `margin:0;font-size:15px;font-weight:700;color:${C.sub}`,
   chip: `border:2px solid ${C.grey};border-radius:99px;padding:4px 12px;font-size:14px;font-weight:800;color:${C.ink};white-space:nowrap`,
@@ -141,12 +142,12 @@ const S = {
   neeTitle: `margin:0;font-size:17px;line-height:1.25;font-weight:900;color:${C.ink}`,
   neeComment: `margin:4px 0 0;font-size:15px;font-weight:700;color:${C.ink};white-space:pre-wrap`,
   neeDue: `margin:8px 0 0;font-size:14px;font-weight:800;color:${C.coralD}`,
-  ok: `border-radius:16px;padding:12px 14px;background:${C.lila};font-size:16px;font-weight:800;color:${C.violet}`,
+  ok: `border-radius:16px;padding:12px 14px;background:${C.tint};font-size:16px;font-weight:800;color:${C.brand}`,
   noteTitle: `margin:0;font-size:16px;line-height:1.25;font-weight:900;color:${C.ink}`,
   noteAnswer: `font-size:14px;font-weight:800;color:${C.sub}`,
   noteComment: `margin:4px 0 0;font-size:15px;font-weight:700;color:${C.ink};white-space:pre-wrap`,
   good: `margin:0;font-size:15px;font-weight:700;color:${C.ink};white-space:pre-wrap`,
-  note: `border-radius:14px;padding:12px 14px;background:${C.lila};font-size:15px;font-weight:700;color:${C.violet}`,
+  note: `border-radius:14px;padding:12px 14px;background:${C.tint};font-size:15px;font-weight:700;color:${C.brand}`,
   preheader: 'display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;font-size:1px;line-height:1px',
 } as const;
 
@@ -210,7 +211,7 @@ function renderHtml(s: Summary): string {
     `<title>${FORM_TITLE}</title></head>` +
     `<body style="${S.body}">` +
     `<div style="${S.preheader}">${e(preheader)}</div>` +
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${BOX};background:${C.lila}">` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${BOX};background:${C.tint}">` +
     `<tr><td align="center" style="${S.outer}">` +
     `<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="${BOX};${S.sheet}">` +
     `<tr><td style="${S.inner}">` +

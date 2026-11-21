@@ -38,7 +38,7 @@ export interface StartScreenProps {
 
 const inputClass =
   'block w-full min-h-[52px] rounded-chunky border-2 border-grey bg-[#f7f7f7] px-3.5 py-3 text-[17px] font-bold text-ink ' +
-  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-violet';
+  'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-d';
 
 export function StartScreen({
   hasLogo,
@@ -78,7 +78,7 @@ export function StartScreen({
     <form className="flex flex-1 flex-col" onSubmit={submit} noValidate>
       <header className="px-[18px] pt-[22px]">
         {hasLogo && <img src="/api/branding/logo" alt="" className="block h-[30px] w-auto" />}
-        <h1 className={hasLogo ? 'sr-only' : 'm-0 text-[18px] font-black text-violet'}>Werkplekinspectie</h1>
+        <h1 className={hasLogo ? 'sr-only' : 'm-0 text-[18px] font-black text-brand-d'}>Werkplekinspectie</h1>
       </header>
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
@@ -95,7 +95,7 @@ export function StartScreen({
         {outbox.length > 0 && backOnline && (
           <p
             role="status"
-            className="m-0 mb-3 flex items-center gap-2.5 rounded-chunky bg-lila px-3.5 py-3 text-[15px] font-extrabold text-violet"
+            className="m-0 mb-3 flex items-center gap-2.5 rounded-chunky bg-brand-l px-3.5 py-3 text-[15px] font-extrabold text-brand-d"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12.6a10 10 0 0 1 14 0M8.5 16.1a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0M12 20h.01" />
@@ -267,8 +267,8 @@ function Notice({
   children: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-center gap-3 rounded-chunky bg-lila px-3.5 py-3">
-      <p role={role} className="m-0 flex-1 text-[15px] font-extrabold text-violet">
+    <div className="mb-3 flex items-center gap-3 rounded-chunky bg-brand-l px-3.5 py-3">
+      <p role={role} className="m-0 flex-1 text-[15px] font-extrabold text-brand-d">
         {children}
       </p>
       <ChunkyButton variant="line" className="min-h-11 w-auto shrink-0 px-4" onClick={onAction}>

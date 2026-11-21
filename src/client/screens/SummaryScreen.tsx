@@ -237,7 +237,7 @@ function NeeCard({ draft, id, text, incomplete, highlighted, markRef, onEdit }: 
           type="button"
           aria-describedby={titleId}
           onClick={() => onEdit(id)}
-          className="-my-2 -mr-2 flex min-h-11 items-center gap-1 rounded-chunky px-2 text-[15px] font-black text-violet focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-violet"
+          className="-my-2 -mr-2 flex min-h-11 items-center gap-1 rounded-chunky px-2 text-[15px] font-black text-brand-d focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 20h9" />
@@ -293,7 +293,7 @@ function Row({ title, highlighted, markRef, onClick, children }: RowProps) {
       className={cn(
         'flex w-full items-center justify-between gap-3 rounded-chunky border-2 border-b-5 bg-white px-3.5 py-3 text-left',
         highlighted ? 'border-coral' : 'border-grey',
-        'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet',
+        'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-brand-d',
         'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-transform',
       )}
     >

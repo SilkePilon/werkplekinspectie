@@ -113,7 +113,7 @@ export function QuestionScreen({ draft, id, dispatch, onNext, onBack, onClose }:
       />
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
-        <p className="m-0 flex items-center gap-2 text-[15px] font-extrabold text-violet">
+        <p className="m-0 flex items-center gap-2 text-[15px] font-extrabold text-brand-d">
           <SectionIcon name={section.icon} />
           {section.title}
           <span aria-hidden="true" className="ml-auto font-bold text-sub">
@@ -185,8 +185,8 @@ function NoteControl({ note, onOpen }: { note: string; onOpen: () => void }) {
         type="button"
         onClick={onOpen}
         className={
-          'mt-3 flex min-h-12 items-center gap-2 self-start rounded-chunky px-1 text-[16px] font-black text-violet ' +
-          'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-violet enabled:active:opacity-70'
+          'mt-3 flex min-h-12 items-center gap-2 self-start rounded-chunky px-1 text-[16px] font-black text-brand-d ' +
+          'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d enabled:active:opacity-70'
         }
       >
         <PencilIcon />
@@ -200,7 +200,7 @@ function NoteControl({ note, onOpen }: { note: string; onOpen: () => void }) {
       onClick={onOpen}
       className={
         'mt-3 flex w-full items-start justify-between gap-3 rounded-chunky border-2 border-b-5 border-grey bg-white px-3.5 py-3 text-left ' +
-        'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet ' +
+        'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-brand-d ' +
         'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-transform'
       }
     >
@@ -208,7 +208,7 @@ function NoteControl({ note, onOpen }: { note: string; onOpen: () => void }) {
         <span className="block text-[14px] font-extrabold text-sub">Opmerking</span>
         <span className="line-clamp-3 block text-[16px] font-bold break-words text-ink">{text}</span>
       </span>
-      <span className="flex shrink-0 items-center gap-1 text-[15px] font-black text-violet">
+      <span className="flex shrink-0 items-center gap-1 text-[15px] font-black text-brand-d">
         <PencilIcon />
         Aanpassen
       </span>

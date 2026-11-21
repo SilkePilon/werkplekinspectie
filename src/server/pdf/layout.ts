@@ -30,7 +30,7 @@ export const COLORS = {
   sub: '#5F5670',
   line: '#8A8494',
   headerFill: '#E5E5E5',
-  sectionFill: '#EFE9F7',
+  sectionFill: '#FFF1E8',
   neeFill: '#FDECEB',
 } as const;
 

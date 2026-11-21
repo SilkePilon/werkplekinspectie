@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
-const VIOLET = '#431961';
+const ORANGE = '#FF5800';
 
 export default defineConfig({
   plugins: [
@@ -24,7 +24,7 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-        theme_color: VIOLET,
+        theme_color: ORANGE,
         background_color: '#FFFFFF',
         icons: [
           { src: '/icons/pwa-192x192.png', sizes: '192x192', type: 'image/png' },

@@ -22,7 +22,7 @@ export function ProgressBar({ value, label, className }: ProgressBarProps) {
     >
       <div
         className={cn(
-          'relative h-full rounded-full bg-violet motion-safe:transition-[width] motion-safe:duration-300',
+          'relative h-full rounded-full bg-brand motion-safe:transition-[width] motion-safe:duration-300',
           // The light stripe on top, as in the mockup.
           "after:absolute after:inset-x-2 after:top-1 after:h-1 after:rounded-[9px] after:bg-white/28 after:content-['']",
           percent < 8 && 'after:hidden',

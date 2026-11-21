@@ -62,7 +62,7 @@ export function SignatureScreen({ draft, dispatch, onSend, busy, onBack, onClose
             type="button"
             onClick={redo}
             disabled={isEmpty}
-            className="absolute top-1 right-1 z-10 min-h-11 rounded-chunky px-3 text-[15px] font-black text-violet disabled:text-mute focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-violet"
+            className="absolute top-1 right-1 z-10 min-h-11 rounded-chunky px-3 text-[15px] font-black text-brand-d disabled:text-mute focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d"
           >
             Opnieuw
           </button>
@@ -74,7 +74,7 @@ export function SignatureScreen({ draft, dispatch, onSend, busy, onBack, onClose
           </p>
         )}
 
-        <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-chunky py-1 text-[16px] has-focus-visible:outline-solid has-focus-visible:outline-3 has-focus-visible:outline-offset-3 has-focus-visible:outline-violet">
+        <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-chunky py-1 text-[16px] has-focus-visible:outline-solid has-focus-visible:outline-3 has-focus-visible:outline-offset-3 has-focus-visible:outline-brand-d">
           <input
             type="checkbox"
             checked={draft.declaration}
@@ -83,7 +83,7 @@ export function SignatureScreen({ draft, dispatch, onSend, busy, onBack, onClose
           />
           <span
             aria-hidden="true"
-            className="grid size-7 shrink-0 place-items-center rounded-[8px] border-2 border-grey-d bg-white text-transparent peer-checked:border-violet peer-checked:bg-violet peer-checked:text-white"
+            className="grid size-7 shrink-0 place-items-center rounded-[8px] border-2 border-grey-d bg-white text-transparent peer-checked:border-brand peer-checked:bg-brand peer-checked:text-white"
           >
             <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 6 9 17l-5-5" />

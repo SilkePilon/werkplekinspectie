@@ -51,7 +51,7 @@ describe('manifest.webmanifest', () => {
       orientation: 'portrait',
       start_url: '/',
       scope: '/',
-      theme_color: '#431961',
+      theme_color: '#FF5800',
       background_color: '#FFFFFF',
     });
   });

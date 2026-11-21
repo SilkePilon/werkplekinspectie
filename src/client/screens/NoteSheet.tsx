@@ -33,7 +33,7 @@ export function NoteSheet({ open, onOpenChange, text, onChange, onDone }: NoteSh
         onChange={(e) => onChange(e.target.value.slice(0, LIMITS.comment))}
         className={
           'block min-h-[110px] w-full resize-none rounded-chunky border-2 border-grey bg-[#f7f7f7] p-3.5 text-[17px] font-bold text-ink ' +
-          'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-violet'
+          'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-d'
         }
       />
       <p id={ids.hint} className="mx-0.5 mt-2.5 mb-0 text-[15px] text-sub">

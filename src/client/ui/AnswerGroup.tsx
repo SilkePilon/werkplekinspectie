@@ -30,8 +30,8 @@ const OPTIONS: readonly Option[] = [
     value: 'ja',
     label: 'Ja',
     icon: <path d="M20 6 9 17l-5-5" />,
-    on: 'bg-lila border-violet text-violet',
-    iconOn: 'bg-violet border-violet text-white',
+    on: 'bg-brand-l border-brand text-brand-d',
+    iconOn: 'bg-brand border-brand text-white',
   },
   {
     value: 'nee',
@@ -70,7 +70,7 @@ export function AnswerGroup({ name, legend, hideLegend = false, value, onChange,
               className={cn(
                 'relative flex min-h-[62px] cursor-pointer select-none items-center gap-3.5 rounded-chunky px-4 py-2',
                 'border-2 border-b-5 border-grey bg-white text-[20px] font-extrabold leading-tight text-ink',
-                'has-focus-visible:outline-solid has-focus-visible:outline-3 has-focus-visible:outline-offset-3 has-focus-visible:outline-violet',
+                'has-focus-visible:outline-solid has-focus-visible:outline-3 has-focus-visible:outline-offset-3 has-focus-visible:outline-brand-d',
                 'motion-safe:transition-colors',
                 selected && opt.on,
               )}

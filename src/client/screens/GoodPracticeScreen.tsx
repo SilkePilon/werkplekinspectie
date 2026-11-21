@@ -36,7 +36,7 @@ export function GoodPracticeScreen({
 
       <main className="flex flex-1 flex-col px-[18px] pt-[18px]">
         {!fromSummary && (
-          <p className="m-0 flex items-center gap-2 text-[15px] font-extrabold text-violet">
+          <p className="m-0 flex items-center gap-2 text-[15px] font-extrabold text-brand-d">
             <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[22px] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z" />
             </svg>
@@ -55,7 +55,7 @@ export function GoodPracticeScreen({
           onChange={(e) => dispatch({ type: 'goodPractice', text: e.target.value })}
           className={
             'block min-h-[150px] w-full resize-y rounded-chunky border-2 border-grey bg-[#f7f7f7] p-3.5 text-[17px] font-bold text-ink ' +
-            'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-violet'
+            'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-d'
           }
         />
         <p id={ids.hint} className="mx-0.5 mt-2.5 mb-0 text-[15px] text-sub">

@@ -5,14 +5,15 @@
 @theme {
   --font-sans: "Nunito Variable", ui-sans-serif, system-ui, sans-serif;
 
-  /* Text and brand */
+  /* Text and brand. The logo's orange is for fills (white text on it only at 19px+ bold, 3.2:1);
+     orange text, outlines and the button's bottom edge use the darker brand-d (5.0:1 on white). */
   --color-ink: #26193c;
-  --color-violet: #431961;
-  --color-violet-d: #26193c;
-  --color-lila: #efe9f7;
-  /* Nee and errors only */
-  --color-coral: #f34842;
-  --color-coral-d: #c42b24;
+  --color-brand: #ff5800;
+  --color-brand-d: #c44400;
+  --color-brand-l: #fff1e8;
+  /* Nee and errors only: a red that stays apart from the orange (white on it 4.8:1). */
+  --color-coral: #d92d20;
+  --color-coral-d: #a61b12;
   --color-roze: #fdeceb;
   /* Neutrals */
   --color-grey: #e5e5e5;
