@@ -80,6 +80,8 @@ export function NeeSheet({
     count: useId(),
     dateError: useId(),
     photoNote: useId(),
+    photosHeading: useId(),
+    optional: useId(),
   };
 
   const extraPhotos = photosOver(photos.length, photosElsewhere);
@@ -140,7 +142,7 @@ export function NeeSheet({
         </p>
       )}
 
-      <div className="mt-4">
+      <div className="mt-5">
         <DatePicker
           legend="Opgelost vóór"
           value={date}
@@ -153,12 +155,25 @@ export function NeeSheet({
       </div>
       {errors.date && <ErrorText id={ids.dateError}>{errors.date}</ErrorText>}
 
+      {/* Same heading style as "Opgelost vóór", marked optional: only the comment and date are required. */}
+      <p id={ids.photosHeading} className="mt-5 mb-2 flex items-center gap-2 text-[19px] font-black leading-tight text-ink">
+        <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-grey/70 text-sub">
+          <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+            <circle cx="12" cy="13" r="3" />
+          </svg>
+        </span>
+        Foto&apos;s
+        <span id={ids.optional} className="rounded-full bg-grey/70 px-2.5 py-0.5 text-[13px] font-extrabold text-sub">
+          Niet verplicht
+        </span>
+      </p>
       <ChunkyButton
         variant="line"
         busy={busy}
         disabled={perItemFull || totalFull}
-        aria-describedby={photoNote ? ids.photoNote : undefined}
-        className="mt-4 mb-3"
+        aria-describedby={idList(ids.optional, photoNote && ids.photoNote)}
+        className="mb-3"
         onClick={() => fileRef.current?.click()}
       >
         <CameraIcon />
@@ -203,7 +218,7 @@ export function NeeSheet({
 
       {/* Sticky: with the keyboard open the sheet may scroll, Doorgaan stays in sight. */}
       <div className="sticky -bottom-px -mx-[18px] bg-white px-[18px] pt-2">
-        <ChunkyButton variant="coral" onClick={submit}>
+        <ChunkyButton onClick={submit}>
           Doorgaan
         </ChunkyButton>
       </div>

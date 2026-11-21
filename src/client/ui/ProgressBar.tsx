@@ -35,9 +35,10 @@ export function ProgressBar({ value, label, className }: ProgressBarProps) {
         className={cn(
           'relative h-full rounded-full bg-brand motion-safe:transition-[width] motion-safe:duration-300',
           from !== percent && 'motion-safe:animate-progress',
-          // The light stripe on top, as in the mockup.
-          "after:absolute after:inset-x-2 after:top-1 after:h-1 after:rounded-[9px] after:bg-white/28 after:content-['']",
-          percent < 8 && 'after:hidden',
+          // The light stripe on top, as in the mockup, on every step, also the first: its side insets shrink with a short
+          // bar, and a started bar is never narrower than 22px, so the stripe always fits.
+          "after:absolute after:inset-x-[min(8px,28%)] after:top-1 after:h-1 after:rounded-[9px] after:bg-white/28 after:content-['']",
+          percent > 0 ? 'min-w-[22px]' : 'after:hidden',
         )}
         style={{ width: `${percent}%`, '--from': `${from}%` } as CSSProperties}
       />

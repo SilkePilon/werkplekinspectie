@@ -125,6 +125,15 @@ describe('ProgressBar', () => {
     expect(bar.getAttribute('aria-valuetext')).toBe('Vraag 12 van 21');
   });
 
+  test('the light stripe shows from the first of 21 questions on; only an empty bar hides it', () => {
+    const { container, rerender } = render(<ProgressBar value={1 / 21} label="Vraag 1 van 21" />);
+    const fill = () => container.querySelector('[role="progressbar"] > div')!.className.split(/\s+/);
+    expect(fill()).not.toContain('after:hidden');
+    expect(fill()).toContain('min-w-[22px]');
+    rerender(<ProgressBar value={0} label="Start" />);
+    expect(fill()).toContain('after:hidden');
+  });
+
   test('clamps values outside 0..1', () => {
     render(<ProgressBar value={1.4} label="Klaar" />);
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('100');

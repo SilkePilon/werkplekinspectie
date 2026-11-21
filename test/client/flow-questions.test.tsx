@@ -314,6 +314,10 @@ describe('question flow', () => {
     await user.click(screen.getByText('Nee'));
     const dialog = neeDialog();
     expect(within(dialog).getByRole('group', { name: 'Opgelost vóór' })).toBeTruthy();
+    // Photos are optional, and the button says so to screen readers too.
+    const photo = button('Foto toevoegen', dialog);
+    const described = photo.getAttribute('aria-describedby')!.split(' ').map((id) => document.getElementById(id)?.textContent);
+    expect(described).toContain('Niet verplicht');
     const grid = within(dialog).getByRole('grid');
     expect(within(dialog).getByRole('button', { name: 'Vorige maand' })).toHaveProperty('disabled', true);
     const today = todayButton(dialog);

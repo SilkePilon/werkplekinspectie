@@ -88,7 +88,14 @@ export function DatePicker({ legend, value, min, today, onChange, describedBy, f
 
   return (
     <div role="group" aria-labelledby={legendId} aria-describedby={describedBy}>
-      <p id={legendId} className="m-0 mb-1.5 text-[15px] font-extrabold">
+      {/* A heading of its own in the sheet, so the date is not missed. */}
+      <p id={legendId} className="m-0 mb-2 flex items-center gap-2 text-[19px] font-black leading-tight text-ink">
+        <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-brand-l text-brand-d">
+          <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="18" height="16" rx="3" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+        </span>
         {legend}
       </p>
       <div className="rounded-chunky border-2 border-grey bg-white p-2.5">

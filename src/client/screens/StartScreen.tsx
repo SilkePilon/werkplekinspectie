@@ -78,8 +78,11 @@ export function StartScreen({
 
   return (
     <form className="flex flex-1 flex-col" onSubmit={submit} noValidate>
-      <header className="px-[18px] pt-[22px]">
-        {hasLogo && <img src="/api/branding/logo" alt="" className="block h-[30px] w-auto" />}
+      {/* Centred, and big enough to read at a glance; a wide logo is capped at the screen's width. */}
+      <header className="px-[18px] pt-[26px] text-center">
+        {hasLogo && (
+          <img src="/api/branding/logo" alt="" className="mx-auto block h-[44px] w-auto max-w-[min(100%,280px)] object-contain" />
+        )}
         <h1 className={hasLogo ? 'sr-only' : 'm-0 text-[18px] font-black text-brand-d'}>Werkplekinspectie</h1>
       </header>
 
