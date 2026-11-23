@@ -75,6 +75,7 @@ export function GoodPracticeScreen({
         )}
 
         <PhotoField
+          title="Foto's werkplek"
           photos={photos}
           fullNote={photosFull ? `Maximaal ${LIMITS.goodPracticePhotos} foto's bij deze vraag.` : ''}
           onAdd={(url) =>

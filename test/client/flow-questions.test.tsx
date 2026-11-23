@@ -318,7 +318,7 @@ describe('question flow', () => {
     // Plain black title, no red cross.
     expect(within(dialog).getByRole('heading', { name: 'Wat is er mis?' }).className).toContain('text-ink');
     // Photos are optional, and the button says so to screen readers too.
-    const photo = button('Foto toevoegen', dialog);
+    const photo = button('Foto maken', dialog);
     const described = photo.getAttribute('aria-describedby')!.split(' ').map((id) => document.getElementById(id)?.textContent);
     expect(described).toContain('Niet verplicht');
 
@@ -561,7 +561,8 @@ describe('photos', () => {
     await resume(user);
     await user.click(screen.getByText('Nee'));
     const dialog = neeDialog();
-    const input = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+    // The gallery input; the camera one has `capture` (see the first test).
+    const input = dialog.querySelector('input[type="file"]:not([capture])') as HTMLInputElement;
     return { dialog, input };
   }
 
@@ -573,16 +574,26 @@ describe('photos', () => {
     await seed({});
     const { dialog, input } = await openSheet(user);
     expect(input.accept).toBe('image/*');
-    expect(input.hasAttribute('capture')).toBe(false);
+    // "Foto maken" goes straight to the back camera: some phones offer only the gallery without it.
+    const camera = dialog.querySelector('input[type="file"][capture]') as HTMLInputElement;
+    expect(camera.getAttribute('capture')).toBe('environment');
+    expect(camera.accept).toBe('image/*');
+    const click = vi.spyOn(camera, 'click');
+    await user.click(button('Foto maken', dialog));
+    expect(click).toHaveBeenCalledTimes(1);
+    await user.upload(camera, file());
+    await waitFor(() => expect(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(1));
+    await user.click(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })[0]!);
 
     for (let i = 0; i < 3; i++) await user.upload(input, file());
     await waitFor(() => expect(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(3));
-    expect(button('Foto toevoegen', dialog).disabled).toBe(true);
+    expect(button('Foto maken', dialog).disabled).toBe(true);
+    expect(button('Uit galerij', dialog).disabled).toBe(true);
     expect(within(dialog).getByText("Maximaal 3 foto's per vraag.")).toBeTruthy();
 
     await user.click(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })[0]!);
     expect(within(dialog).getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(2);
-    expect(button('Foto toevoegen', dialog).disabled).toBe(false);
+    expect(button('Foto maken', dialog).disabled).toBe(false);
     await tick(300);
     await waitFor(async () => expect((await loadDraft())?.nee['1A']?.photos).toEqual([PHOTO, PHOTO]));
   });
@@ -596,7 +607,7 @@ describe('photos', () => {
     );
     const { dialog } = await openSheet(user);
     expect(screen.getByText('Is de werkplek veilig en goed afgezet?')).toBeTruthy();
-    expect(button('Foto toevoegen', dialog).disabled).toBe(true);
+    expect(button('Foto maken', dialog).disabled).toBe(true);
     expect(within(dialog).getByText("Maximaal 15 foto's per inspectie.")).toBeTruthy();
   });
 
@@ -608,7 +619,7 @@ describe('photos', () => {
       { '1A': done('a', three), '1B': done('b', three), '1C': done('c', three), '1D': done('d', three), '2A': done('e', three) },
     );
     const { dialog } = await openSheet(user);
-    expect(button('Foto toevoegen', dialog).disabled).toBe(false);
+    expect(button('Foto maken', dialog).disabled).toBe(false);
     expect(within(dialog).queryByText(/Maximaal/)).toBeNull();
   });
 

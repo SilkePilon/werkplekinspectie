@@ -12,31 +12,38 @@ export interface PhotoFieldProps {
   onRemove: (index: number) => void;
   /** An error about the photos from outside, e.g. too many after a change elsewhere. */
   error?: string;
+  /** The heading; "Foto's" by default. */
+  title?: string;
 }
 
-/**
- * "Foto's (niet verplicht)": a button that opens the camera or the gallery, and the photos taken
- * so far with a remove button each. Used by the Nee sheet and the "Wat gaat hier goed?" question.
- */
-export function PhotoField({ photos, fullNote, onAdd, onRemove, error }: PhotoFieldProps) {
-  const [busy, setBusy] = useState(false);
-  const [photoError, setPhotoError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
-  const ids = { note: useId(), optional: useId() };
+type Source = 'camera' | 'gallery';
 
-  async function pick(e: ChangeEvent<HTMLInputElement>) {
+/**
+ * "Foto's (niet verplicht)": "Foto maken" opens the camera, "Uit galerij" the gallery, and the
+ * photos so far with a remove button each. Two buttons, because without `capture` some Android
+ * phones offer only the gallery. Used by the Nee sheet and the "Wat gaat hier goed?" question.
+ */
+export function PhotoField({ photos, fullNote, onAdd, onRemove, error, title = "Foto's" }: PhotoFieldProps) {
+  const [busy, setBusy] = useState<Source | null>(null);
+  const [photoError, setPhotoError] = useState('');
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const ids = { note: useId(), optional: useId() };
+  const describedBy = fullNote ? `${ids.optional} ${ids.note}` : ids.optional;
+
+  async function pick(e: ChangeEvent<HTMLInputElement>, source: Source) {
     const file = e.target.files?.[0];
     // Allow picking the same file again later.
     e.target.value = '';
     if (!file) return;
     setPhotoError('');
-    setBusy(true);
+    setBusy(source);
     try {
       onAdd(await compressPhoto(file));
     } catch (err) {
       setPhotoError(err instanceof PhotoError ? err.message : new PhotoError().message);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -44,24 +51,36 @@ export function PhotoField({ photos, fullNote, onAdd, onRemove, error }: PhotoFi
     <>
       {/* Same heading style as "Opgelost vóór", marked optional. */}
       <p className="mt-5 mb-2 flex items-center gap-2 text-[19px] font-black leading-tight text-ink">
-        Foto&apos;s
+        {title}
         <span id={ids.optional} className="rounded-full bg-grey/70 px-2.5 py-0.5 text-[13px] font-extrabold text-sub">
           Niet verplicht
         </span>
       </p>
-      <ChunkyButton
-        variant="line"
-        busy={busy}
-        disabled={fullNote !== ''}
-        aria-describedby={fullNote ? `${ids.optional} ${ids.note}` : ids.optional}
-        className="mb-3"
-        onClick={() => fileRef.current?.click()}
-      >
-        <CameraIcon />
-        Foto toevoegen
-      </ChunkyButton>
-      {/* No `capture`: the phone then offers both the camera and the gallery. */}
-      <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pick(e)} />
+      <div className="mb-3 grid grid-cols-2 gap-2.5">
+        <ChunkyButton
+          variant="line"
+          busy={busy === 'camera'}
+          disabled={fullNote !== ''}
+          aria-describedby={describedBy}
+          onClick={() => cameraRef.current?.click()}
+        >
+          <CameraIcon />
+          Foto maken
+        </ChunkyButton>
+        <ChunkyButton
+          variant="line"
+          busy={busy === 'gallery'}
+          disabled={fullNote !== ''}
+          aria-describedby={describedBy}
+          onClick={() => galleryRef.current?.click()}
+        >
+          <GalleryIcon />
+          Uit galerij
+        </ChunkyButton>
+      </div>
+      {/* `capture`: straight to the back camera. Without it: the gallery (and on some phones the camera too). */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void pick(e, 'camera')} />
+      <input ref={galleryRef} type="file" accept="image/*" hidden onChange={(e) => void pick(e, 'gallery')} />
       {fullNote && (
         <p id={ids.note} className="mt-0 mb-3 text-[15px] text-sub">
           {fullNote}
@@ -109,6 +128,16 @@ export function ErrorText({ id, children }: { id?: string; children: ReactNode }
       </svg>
       {children}
     </p>
+  );
+}
+
+function GalleryIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[22px]" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="m21 16-5-5-9 9" />
+    </svg>
   );
 }
 

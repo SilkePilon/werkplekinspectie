@@ -203,17 +203,19 @@ describe('good practice', () => {
     const user = setup();
     await seed(allJa());
     await openAt({ name: 'goodPractice' });
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(screen.getByText("Foto's werkplek")).toBeTruthy();
+    expect(document.querySelector('input[type="file"][capture="environment"]')).toBeTruthy();
+    const input = document.querySelector('input[type="file"]:not([capture])') as HTMLInputElement;
     expect(input.accept).toBe('image/*');
     const file = () => new File([new Uint8Array([1])], 'foto.jpg', { type: 'image/jpeg' });
 
     for (let i = 0; i < 3; i++) await user.upload(input, file());
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(3));
-    expect(button('Foto toevoegen').disabled).toBe(true);
+    expect(button('Uit galerij').disabled).toBe(true);
     expect(screen.getByText("Maximaal 3 foto's bij deze vraag.")).toBeTruthy();
 
     await user.click(screen.getAllByRole('button', { name: 'Foto verwijderen' })[0]!);
-    expect(button('Foto toevoegen').disabled).toBe(false);
+    expect(button('Uit galerij').disabled).toBe(false);
     await waitFor(async () => expect((await saved()).goodPracticePhotos).toEqual([photo, photo]));
 
     await user.click(button('Volgende'));
