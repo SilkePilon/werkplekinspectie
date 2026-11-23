@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { clear, createStore } from 'idb-keyval';
+import { clear, createStore, get, set } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Submission } from '@shared/schema';
 import { newDraft, toIsoWithOffset, type Draft } from '../../src/client/state/draft';
@@ -125,6 +125,14 @@ describe('remembered name', () => {
     await setRememberedName('J. Jansen');
     await saveDraft(newDraft('J. Jansen', 'X', 'P-1', NOW));
     await clearDraft();
+    expect(await getRememberedName()).toBe('J. Jansen');
+  });
+  test('a name remembered by an older version is forgotten, once', async () => {
+    const kv = createStore('werkplekinspectie', 'kv');
+    await set('monteur', 'Nieuwbouw Voorbeeld B.V.', kv);
+    expect(await getRememberedName()).toBe('');
+    expect(await get('monteur', kv)).toBeUndefined();
+    await setRememberedName('J. Jansen');
     expect(await getRememberedName()).toBe('J. Jansen');
   });
 });

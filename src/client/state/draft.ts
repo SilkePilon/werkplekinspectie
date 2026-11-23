@@ -33,6 +33,8 @@ export interface Draft {
    */
   notes?: Partial<Record<QuestionId, string>>;
   goodPractice: string;
+  /** JPEG data URLs. Optional: drafts saved before these photos existed lack it. */
+  goodPracticePhotos?: string[];
   signature?: string;
   signedAt?: string;
   declaration: boolean;
@@ -45,6 +47,7 @@ export type DraftAction =
   | { type: 'neeDetails'; id: QuestionId; details: Partial<NeeDetails> }
   | { type: 'note'; id: QuestionId; text: string }
   | { type: 'goodPractice'; text: string }
+  | { type: 'goodPracticePhotos'; photos: string[] }
   | { type: 'sign'; signature: string; at: string }
   | { type: 'declare'; value: boolean }
   | { type: 'header'; monteur?: string; project?: string; projectnummer?: string }
@@ -88,6 +91,7 @@ export function newDraft(monteur: string, project: string, projectnummer: string
     nee: {},
     notes: {},
     goodPractice: '',
+    goodPracticePhotos: [],
     declaration: false,
     website: '',
   };
@@ -114,6 +118,8 @@ function apply(d: Draft, a: DraftAction): Draft {
       return { ...d, nee: { ...d.nee, [a.id]: { ...EMPTY_NEE, ...d.nee[a.id], ...a.details } } };
     case 'goodPractice':
       return { ...d, goodPractice: a.text };
+    case 'goodPracticePhotos':
+      return { ...d, goodPracticePhotos: a.photos.slice(0, LIMITS.goodPracticePhotos) };
     case 'sign':
       return { ...d, signature: a.signature, signedAt: a.at };
     case 'declare':
@@ -201,6 +207,7 @@ export function toSubmission(d: Draft): Submission {
       Answer
     >,
     goodPractice: d.goodPractice,
+    goodPracticePhotos: [...(d.goodPracticePhotos ?? [])],
     signature: d.signature ?? '',
     declaration: true,
     website: d.website,
@@ -236,6 +243,7 @@ export function draftFromSubmission(s: Submission): Draft {
     nee,
     notes,
     goodPractice: s.goodPractice,
+    goodPracticePhotos: [...(s.goodPracticePhotos ?? [])],
     signedAt: s.signedAt,
     declaration: false,
     website: s.website ?? '',

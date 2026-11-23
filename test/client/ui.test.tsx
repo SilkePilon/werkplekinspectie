@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, test, vi } from 'vitest';
@@ -144,7 +144,7 @@ describe('Sheet', () => {
   test('is a titled, focus-holding dialog that closes on Escape', async () => {
     const onOpenChange = vi.fn();
     render(
-      <Sheet open onOpenChange={onOpenChange} title="Wat is er mis?" tone="nee">
+      <Sheet open onOpenChange={onOpenChange} title="Wat is er mis?">
         <button type="button">Doorgaan</button>
       </Sheet>,
     );
@@ -259,82 +259,42 @@ describe('DatePicker', () => {
       </>
     );
   }
+  const input = () => screen.getByLabelText('Opgelost vóór') as HTMLInputElement;
   const picked = () => document.querySelector('output')!.textContent;
-  const day = (date: string) => document.querySelector<HTMLButtonElement>(`[data-date="${date}"]`)!;
 
-  test('only a Monday-first month calendar, named by the legend; picking a day sets it', async () => {
-    const user = userEvent.setup();
+  test("the phone's own date input, labelled by the legend; the chosen day shows in words", () => {
     render(<Picker />);
-    expect(screen.getByRole('group', { name: 'Opgelost vóór' })).toBeTruthy();
-    expect(screen.queryAllByRole('radio')).toHaveLength(0);
-    const grid = screen.getByRole('grid', { name: 'november 2026' });
-    expect([...grid.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']);
-    // 1 November 2026 is a Sunday: six empty cells before it.
-    expect(grid.querySelector('tbody tr')!.querySelectorAll('td button')).toHaveLength(1);
-    await user.click(screen.getByRole('button', { name: 'donderdag 26 november 2026' }));
+    expect(input().type).toBe('date');
+    expect(screen.getByText('Kies een datum')).toBeTruthy();
+    fireEvent.change(input(), { target: { value: '2026-11-26' } });
     expect(picked()).toBe('2026-11-26');
-    expect(day('2026-11-26').closest('td')!.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('donderdag 26 november 2026')).toBeTruthy();
+    expect(screen.queryByText('Kies een datum')).toBeNull();
   });
 
-  test('today is marked with a darker background, and can be chosen', async () => {
-    const user = userEvent.setup();
-    render(<Picker />);
-    const today = screen.getByRole('button', { name: 'vrijdag 20 november 2026, vandaag' });
-    expect(today.getAttribute('aria-current')).toBe('date');
-    expect(today.className).toContain('bg-grey');
-    await user.click(today);
-    expect(picked()).toBe(TODAY);
-    expect(today.className).toContain('bg-brand');
-  });
-
-  test('every day before today is greyed out and cannot be chosen, even if the inspection began earlier', async () => {
-    const user = userEvent.setup();
+  test('the first day allowed is today, even if the inspection began earlier', () => {
     render(<Picker min="2026-11-18" />);
-    for (const date of ['2026-11-01', '2026-11-18', '2026-11-19']) {
-      expect(day(date).getAttribute('aria-disabled')).toBe('true');
-      expect(day(date).className).toContain('text-mute');
-      await user.click(day(date));
-    }
-    expect(picked()).toBe('');
-    expect(day('2026-11-21').hasAttribute('aria-disabled')).toBe(false);
-    expect(screen.getByRole('button', { name: 'Vorige maand' })).toHaveProperty('disabled', true);
-    await user.click(screen.getByRole('button', { name: 'Volgende maand' }));
-    expect(screen.getByRole('grid', { name: 'december 2026' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Vorige maand' }));
-    expect(screen.getByRole('grid', { name: 'november 2026' })).toBeTruthy();
+    expect(input().min).toBe(TODAY);
   });
 
-  test('keyboard: arrows, Home/End and PageUp/PageDown move one roving focus; Enter picks', async () => {
-    const user = userEvent.setup();
+  test('a later inspection day is the first day allowed', () => {
+    render(<Picker min="2026-11-22" />);
+    expect(input().min).toBe('2026-11-22');
+  });
+
+  test('clicking opens the picker where the browser allows it', () => {
     render(<Picker />);
-    // Exactly one day is in the Tab order: today, when nothing is chosen yet.
-    expect([...document.querySelectorAll('[data-date][tabindex="0"]')].map((b) => b.getAttribute('data-date'))).toEqual([TODAY]);
-    act(() => day(TODAY).focus());
-    const at = () => document.activeElement!.getAttribute('data-date');
-    await user.keyboard('{ArrowRight}');
-    expect(at()).toBe('2026-11-21');
-    await user.keyboard('{ArrowDown}');
-    expect(at()).toBe('2026-11-28');
-    await user.keyboard('{Home}');
-    expect(at()).toBe('2026-11-23');
-    await user.keyboard('{End}');
-    expect(at()).toBe('2026-11-29');
-    await user.keyboard('{ArrowDown}');
-    expect(at()).toBe('2026-12-06');
-    expect(screen.getByRole('grid', { name: 'december 2026' })).toBeTruthy();
-    await user.keyboard('{PageUp}{PageUp}');
-    // Never before today.
-    expect(at()).toBe(TODAY);
-    await user.keyboard('{ArrowLeft}');
-    expect(at()).toBe(TODAY);
-    await user.keyboard('{PageDown}{Enter}');
-    expect(picked()).toBe('2026-12-20');
-    expect(document.querySelectorAll('[data-date][tabindex="0"]')).toHaveLength(1);
+    const showPicker = vi.fn(() => {
+      throw new DOMException('Not allowed', 'NotAllowedError');
+    });
+    Object.assign(input(), { showPicker });
+    fireEvent.click(input());
+    expect(showPicker).toHaveBeenCalledTimes(1);
   });
 
-  test('opens on the month of a date chosen earlier', () => {
+  test('a date chosen earlier is shown', () => {
     render(<Picker initial="2027-01-15" />);
-    expect(screen.getByRole('grid', { name: 'januari 2027' })).toBeTruthy();
-    expect(day('2027-01-15').closest('td')!.getAttribute('aria-selected')).toBe('true');
+    expect(input().value).toBe('2027-01-15');
+    expect(screen.getByText('vrijdag 15 januari 2027')).toBeTruthy();
   });
 });

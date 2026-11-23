@@ -1,6 +1,6 @@
 // On-device storage in IndexedDB: the one in-progress draft, the outbox of signed but
 // unsent inspections, and the technician's name for next time.
-import { createStore, del, get, set, update } from 'idb-keyval';
+import { createStore, del, delMany, get, set, update } from 'idb-keyval';
 import type { Submission } from '@shared/schema';
 import type { Draft } from '../state/draft';
 
@@ -8,7 +8,12 @@ const store = createStore('werkplekinspectie', 'kv');
 
 const DRAFT = 'draft';
 const OUTBOX = 'outbox';
-const MONTEUR = 'monteur';
+/**
+ * A new key forgets every name remembered before it: some people had typed the project as their
+ * name. Bump the version again to make everyone fill in their name once more.
+ */
+const MONTEUR = 'monteur-v2';
+const OLD_MONTEUR = ['monteur'];
 
 const DRAFT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -68,6 +73,8 @@ export async function purgeExpired(now: Date): Promise<void> {
 }
 
 export async function getRememberedName(): Promise<string> {
+  // Best-effort cleanup of the forgotten names; the answer does not depend on it.
+  await delMany(OLD_MONTEUR, store).catch(() => undefined);
   return (await get<string>(MONTEUR, store)) ?? '';
 }
 

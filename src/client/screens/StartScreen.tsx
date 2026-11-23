@@ -40,6 +40,8 @@ export interface StartScreenProps {
 // scroll-mb: a field focused under the sticky Start button is scrolled up past it.
 const inputClass =
   'block w-full min-h-[52px] scroll-mb-[150px] rounded-chunky border-2 border-grey bg-[#f7f7f7] px-3.5 py-3 text-[17px] font-bold text-ink ' +
+  // Light and not bold, so an example never reads as something already filled in.
+  'placeholder:font-semibold placeholder:text-sub/70 ' +
   'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-brand-d';
 
 export function StartScreen({
@@ -165,21 +167,24 @@ export function StartScreen({
           </section>
         ) : (
           <>
-            <p className="mt-0 mb-[22px] text-sub">Waar doe je vandaag de inspectie?</p>
+            {/* Above "Waar doe je…", so nobody reads the name field as part of that question. */}
             {editName && (
-              <Field id={ids.naam} label="Naam">
+              <Field id={ids.naam} label="Jouw naam">
                 <input
                   id={ids.naam}
                   className={inputClass}
                   value={monteur}
                   maxLength={LIMITS.monteur}
                   autoComplete="name"
+                  autoCapitalize="words"
+                  placeholder="Voor- en achternaam"
                   enterKeyHint="next"
                   onKeyDown={(e) => focusOnEnter(e, ids.project)}
                   onChange={(e) => setMonteur(e.target.value)}
                 />
               </Field>
             )}
+            <p className="mt-0 mb-[22px] text-sub">Waar doe je vandaag de inspectie?</p>
             <Field id={ids.project} label="Project">
               <input
                 id={ids.project}

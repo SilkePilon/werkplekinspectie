@@ -52,6 +52,7 @@ function stats(s: Submission) {
       photos += a.photos.length;
     }
   }
+  photos += s.goodPracticePhotos?.length ?? 0;
   return { questions: QUESTION_IDS.length, nee, photos };
 }
 

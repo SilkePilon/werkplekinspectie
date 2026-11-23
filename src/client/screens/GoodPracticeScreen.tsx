@@ -3,6 +3,7 @@ import { LIMITS } from '@shared/limits';
 import type { DraftDispatch } from '../App';
 import type { Draft } from '../state/draft';
 import { ChunkyButton } from '../ui/ChunkyButton';
+import { PhotoField } from '../ui/PhotoField';
 import { TopBar } from '../ui/TopBar';
 
 export interface GoodPracticeScreenProps {
@@ -32,6 +33,8 @@ export function GoodPracticeScreen({
 }: GoodPracticeScreenProps) {
   const ids = { question: useId(), hint: useId(), count: useId() };
   const left = LIMITS.goodPractice - draft.goodPractice.length;
+  const photos = draft.goodPracticePhotos ?? [];
+  const photosFull = photos.length >= LIMITS.goodPracticePhotos;
 
   return (
     <>
@@ -70,6 +73,16 @@ export function GoodPracticeScreen({
             Nog {left} tekens over.
           </p>
         )}
+
+        <PhotoField
+          photos={photos}
+          fullNote={photosFull ? `Maximaal ${LIMITS.goodPracticePhotos} foto's bij deze vraag.` : ''}
+          onAdd={(url) =>
+            // Appends to the photos as they are when the compression finishes, not as they were at the tap.
+            dispatch((current) => ({ type: 'goodPracticePhotos', photos: [...(current.goodPracticePhotos ?? []), url] }))
+          }
+          onRemove={(i) => dispatch({ type: 'goodPracticePhotos', photos: photos.filter((_, j) => j !== i) })}
+        />
       </main>
 
       {/* Sticky above the keyboard, so Volgende is in sight while typing. */}
@@ -80,6 +93,7 @@ export function GoodPracticeScreen({
           className="min-h-12"
           onClick={() => {
             dispatch({ type: 'goodPractice', text: '' });
+            dispatch({ type: 'goodPracticePhotos', photos: [] });
             onNext();
           }}
         >

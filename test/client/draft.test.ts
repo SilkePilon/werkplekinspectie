@@ -441,6 +441,32 @@ describe('notes on Ja and Nvt', () => {
   });
 });
 
+describe('good practice photos', () => {
+  test('kept in order, at most 3, sent along and taken back', () => {
+    const d = apply(complete(), { type: 'goodPracticePhotos', photos: [PHOTO, PHOTO, PHOTO, PHOTO] });
+    expect(d.goodPracticePhotos).toEqual([PHOTO, PHOTO, PHOTO]);
+    const s = toSubmission(d);
+    expect(submissionSchema.parse(s)).toStrictEqual(s);
+    expect(s.goodPracticePhotos).toEqual([PHOTO, PHOTO, PHOTO]);
+    expect(s.goodPracticePhotos).not.toBe(d.goodPracticePhotos);
+    expect(draftFromSubmission(s).goodPracticePhotos).toEqual([PHOTO, PHOTO, PHOTO]);
+  });
+
+  test('a draft saved before these photos existed still sends', () => {
+    const old = complete();
+    delete old.goodPracticePhotos;
+    expect(toSubmission(old).goodPracticePhotos).toEqual([]);
+  });
+
+  test('the schema refuses a fourth photo and accepts a submission without the field', () => {
+    const s = toSubmission(complete());
+    const old = { ...s };
+    delete old.goodPracticePhotos;
+    expect(submissionSchema.safeParse(old).success).toBe(true);
+    expect(submissionSchema.safeParse({ ...s, goodPracticePhotos: [PHOTO, PHOTO, PHOTO, PHOTO] }).success).toBe(false);
+  });
+});
+
 describe('nextUnanswered', () => {
   test("returns '1A' on a new draft and null when all are answered", () => {
     const d = newDraft('J. Jansen', 'X', 'P-1', START);

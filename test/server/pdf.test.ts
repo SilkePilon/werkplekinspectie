@@ -5,7 +5,7 @@ import { pdfFileName, renderInspectionPdf } from '../../src/server/pdf/render.js
 import type { Config } from '../../src/server/config.js';
 import { QUESTIONS, SECTIONS, type QuestionId } from '../../src/shared/questions.js';
 import { submissionSchema, type Answer } from '../../src/shared/schema.js';
-import { PNG_DATA_URL, makeSubmission } from '../fixtures/submission.js';
+import { JPEG_DATA_URL, PNG_DATA_URL, makeSubmission } from '../fixtures/submission.js';
 
 const BRANDING: Config['branding'] = {
   orgName: 'Voorbeeld B.V.',
@@ -203,6 +203,21 @@ describe('renderInspectionPdf', () => {
     const photoPages = pages.slice(withoutPhotos.length).map(squash);
     expect(count(photoPages[0]!, squash('3A - staat van onderhoud'))).toBe(2);
     expect(count(photoPages[1]!, squash('4B - blusmiddelen gekeurd'))).toBe(2);
+  });
+
+  test('good-practice photos come after the Nee photos, captioned with the open question', async () => {
+    const without = await pagesOf(await renderInspectionPdf(makeSubmission({}, { neeIds: ['3A'] }), BRANDING));
+    const pages = await pagesOf(
+      await renderInspectionPdf(
+        makeSubmission({ goodPracticePhotos: [JPEG_DATA_URL, JPEG_DATA_URL] }, { neeIds: ['3A'], photosPerNee: 1 }),
+        BRANDING,
+      ),
+    );
+    expect(pages.length).toBe(without.length + 2);
+    const photoPages = pages.slice(without.length).map(squash);
+    expect(count(photoPages[0]!, squash('3A - staat van onderhoud'))).toBe(1);
+    expect(count(photoPages[0]!, squash('Wat gaat hier goed en waar kan de rest van het bedrijf iets van leren?'))).toBe(1);
+    expect(count(photoPages[1]!, squash('Wat gaat hier goed en waar kan de rest van het bedrijf iets van leren?'))).toBe(1);
   });
 
   describe('very long text (Review Focus 5)', () => {

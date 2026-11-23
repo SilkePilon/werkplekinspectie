@@ -6,8 +6,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
 import type { Submission } from '@shared/schema';
 import { App, type Screen } from '../../src/client/App';
+import { compressPhoto } from '../../src/client/photos/compress';
 import { newDraft, type AnswerValue, type Draft, type NeeDetails } from '../../src/client/state/draft';
 import { listOutbox, loadDraft, saveDraft } from '../../src/client/storage/db';
+
+vi.mock('../../src/client/photos/compress', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/client/photos/compress')>()),
+  compressPhoto: vi.fn(),
+}));
 
 // jsdom has no canvas: a stand-in signature pad the tests can steer.
 const pad = vi.hoisted(() => ({
@@ -179,9 +185,9 @@ describe('good practice', () => {
     await user.type(text, 'Elke ochtend een toolbox.');
     await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
-    expect(screen.getByText('Elke ochtend een toolbox.')).toBeTruthy();
+    expect(button(/^Wat gaat hier goed\?/).textContent).toBe('Wat gaat hier goed?Ingevuld');
 
-    await user.click(button(/Wat gaat hier goed\?/));
+    await user.click(button(/^Wat gaat hier goed\?/));
     expect((history.state as { screen: unknown }).screen).toEqual({ name: 'goodPractice', returnTo: 'summary' });
     expect((screen.getByRole('textbox', { name: GOOD }) as HTMLTextAreaElement).value).toBe(
       'Elke ochtend een toolbox.',
@@ -190,41 +196,70 @@ describe('good practice', () => {
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
     expect((await saved()).goodPractice).toBe('Elke ochtend een toolbox.');
   });
+
+  test('photos: camera or gallery, at most 3, removable, counted on the summary', async () => {
+    const photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==';
+    vi.mocked(compressPhoto).mockResolvedValue(photo);
+    const user = setup();
+    await seed(allJa());
+    await openAt({ name: 'goodPractice' });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.accept).toBe('image/*');
+    const file = () => new File([new Uint8Array([1])], 'foto.jpg', { type: 'image/jpeg' });
+
+    for (let i = 0; i < 3; i++) await user.upload(input, file());
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(3));
+    expect(button('Foto toevoegen').disabled).toBe(true);
+    expect(screen.getByText("Maximaal 3 foto's bij deze vraag.")).toBeTruthy();
+
+    await user.click(screen.getAllByRole('button', { name: 'Foto verwijderen' })[0]!);
+    expect(button('Foto toevoegen').disabled).toBe(false);
+    await waitFor(async () => expect((await saved()).goodPracticePhotos).toEqual([photo, photo]));
+
+    await user.click(button('Volgende'));
+    expect(button(/^Wat gaat hier goed\?/).textContent).toBe("Wat gaat hier goed?2 foto's");
+  });
+
+  test('Overslaan also drops the photos', async () => {
+    const user = setup();
+    await seed(allJa(), {}, { goodPractice: 'Tekst', goodPracticePhotos: ['data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ=='] });
+    await openAt({ name: 'goodPractice' });
+    expect(screen.getAllByRole('button', { name: 'Foto verwijderen' })).toHaveLength(1);
+    await user.click(button('Overslaan'));
+    await waitFor(async () => expect((await saved()).goodPracticePhotos).toEqual([]));
+  });
 });
 
 describe('summary', () => {
-  test('counts, Nee items with comment, date and photos, and the sections', async () => {
-    await seed({ ...allJa(), '4B': 'nee', '7A': 'nvt' }, { '4B': nee4B() });
+  /** The tile of a part of the form, e.g. `tile('Brandpreventie')`. */
+  const tile = (title: string) => screen.getByRole('button', { name: new RegExp(`^${title}`) });
+  /** Every tile as "title + summary". */
+  const tiles = () => screen.getAllByRole('listitem').map((li) => li.textContent);
+
+  test('one tile per part with a short summary, and the open question last', async () => {
+    await seed({ ...allJa(), '4B': 'nee', '8A': 'nvt', '8B': 'nvt', '8C': 'nvt' }, { '4B': nee4B() });
     await openAt({ name: 'summary' });
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
-    expect(screen.getByText('19 × Ja')).toBeTruthy();
-    expect(screen.getByText('1 × Nee')).toBeTruthy();
-    expect(screen.getByText('1 × Nvt')).toBeTruthy();
-
-    const nee = screen.getByRole('region', { name: 'Niet in orde' });
-    expect(within(nee).getByText(`4B ${Q4B}`)).toBeTruthy();
-    expect(within(nee).getByText('Sticker op blusser is van 2023.')).toBeTruthy();
-    expect(within(nee).getByText('Vóór 4 dec, 1 foto')).toBeTruthy();
-    expect(within(nee).queryByText('Nog niet compleet')).toBeNull();
-
-    const all = screen.getByRole('region', { name: 'Alle onderdelen' });
-    expect(within(all).getByText('2 × Ja, 1 × Nee')).toBeTruthy();
-    expect(button(/^7 Hygiëne/, all).textContent).toContain('1 × Ja, 1 × Nvt');
-    expect(button(/^1 Instructie/, all).textContent).toContain('4 × Ja');
+    expect(tiles()).toEqual([
+      'InstructieIn orde',
+      'WerkomgevingIn orde',
+      'GereedschapIn orde',
+      'Brandpreventie1 niet in orde',
+      'BeschermingsmiddelenIn orde',
+      'WerkzaamhedenIn orde',
+      'HygiëneIn orde',
+      'MilieuNvt',
+      'EHBOIn orde',
+      'Wat gaat hier goed?Niet ingevuld',
+    ]);
     expect(summaryButton().disabled).toBe(false);
   });
 
-  test('photo count in plural', async () => {
-    await seed({ ...allJa(), '4B': 'nee' }, { '4B': nee4B({ photos: [PHOTO, PHOTO] }) });
-    await openAt({ name: 'summary' });
-    expect(screen.getByText("Vóór 4 dec, 2 foto's")).toBeTruthy();
-  });
-
-  test('Aanpassen on 4B, change to Ja: back on the summary with 0 × Nee', async () => {
+  test('tapping a part with a Nee opens that Nee; change it to Ja and the part is In orde', async () => {
     const user = setup();
     await seed({ ...allJa(), '4B': 'nee' }, { '4B': nee4B() });
     await openAt({ name: 'summary' });
-    await user.click(button('Aanpassen', screen.getByRole('region', { name: 'Niet in orde' })));
+    await user.click(tile('Brandpreventie'));
     expect(screen.getByText(Q4B)).toBeTruthy();
     expect((history.state as { screen: unknown }).screen).toEqual({ name: 'question', id: '4B', returnTo: 'summary' });
 
@@ -232,17 +267,15 @@ describe('summary', () => {
     await user.click(screen.getByText('Ja'));
     await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
-    expect(screen.getByText('21 × Ja')).toBeTruthy();
-    expect(screen.getByText('0 × Nee')).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Niet in orde' })).toBeNull();
+    expect(tile('Brandpreventie').textContent).toBe('BrandpreventieIn orde');
     expect((await saved()).answers['4B']).toBe('ja');
   });
 
-  test('tapping "4 Brandpreventie" opens 4A and comes back to the summary', async () => {
+  test('tapping a part that is in order opens its first question and comes back', async () => {
     const user = setup();
     await seed(allJa());
     await openAt({ name: 'summary' });
-    await user.click(button(/^4 Brandpreventie/));
+    await user.click(tile('Brandpreventie'));
     expect(screen.getByText(Q4A)).toBeTruthy();
     expect((history.state as { screen: unknown }).screen).toEqual({ name: 'question', id: '4A', returnTo: 'summary' });
 
@@ -250,41 +283,40 @@ describe('summary', () => {
     await user.click(screen.getByText('Niet van toepassing'));
     await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
-    expect(screen.getByText('1 × Nvt')).toBeTruthy();
+    expect(tile('Brandpreventie').textContent).toBe('BrandpreventieIn orde');
   });
 
-  test('an incomplete Nee item blocks signing and says why', async () => {
+  test('incomplete Nee items mark their part Nog niet af, block signing and say why', async () => {
     const user = setup();
     await seed({ ...allJa(), '4B': 'nee', '3A': 'nee' }, { '4B': nee4B({ comment: '  ' }), '3A': nee4B({ actionBefore: '' }) });
     await openAt({ name: 'summary' });
-    const nee = screen.getByRole('region', { name: 'Niet in orde' });
-    expect(within(nee).getAllByText('Nog niet compleet')).toHaveLength(2);
-    expect(within(nee).getByText('1 foto')).toBeTruthy();
+    expect(tile('Gereedschap').textContent).toBe('GereedschapNog niet af');
+    expect(tile('Brandpreventie').textContent).toBe('BrandpreventieNog niet af');
     expect(summaryButton().disabled).toBe(true);
     expect(screen.getByText('Nog 2 punten zijn niet compleet. Maak die eerst af.')).toBeTruthy();
     expect(summaryButton().getAttribute('aria-describedby')).toBeTruthy();
 
-    await user.click(within(nee).getAllByRole('button', { name: 'Aanpassen' })[0]!);
+    await user.click(tile('Gereedschap'));
     expect(screen.getByText('Zijn je gereedschap en klimmaterieel in goede staat?')).toBeTruthy();
   });
 
-  test('an unanswered question also blocks signing', async () => {
+  test('an unanswered question marks its part Nog niet af and blocks signing', async () => {
     const answers = allJa();
     delete answers['9B'];
     await seed(answers);
     await openAt({ name: 'summary' });
     expect(summaryButton().disabled).toBe(true);
     expect(screen.getByText('Nog 1 punt is niet compleet. Maak dat eerst af.')).toBeTruthy();
-    expect(button(/^9 EHBO/).textContent).toContain('Nog niet compleet');
+    expect(tile('EHBO').textContent).toBe('EHBONog niet af');
   });
 
-  test('tapping "9 EHBO" with 9B unanswered opens 9B and comes back to the summary', async () => {
+  test('tapping a part that is not done opens the open question and comes back', async () => {
     const user = setup();
     const answers = allJa();
     delete answers['9B'];
     await seed(answers);
     await openAt({ name: 'summary' });
-    await user.click(button(/^9 EHBO/));
+    await user.click(tile('EHBO'));
     expect(screen.getByText('Is er iemand met een EHBO-diploma?')).toBeTruthy();
     expect((history.state as { screen: unknown }).screen).toEqual({ name: 'question', id: '9B', returnTo: 'summary' });
 
@@ -293,6 +325,7 @@ describe('summary', () => {
     await user.click(button('Volgende'));
     expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
     expect(summaryButton().disabled).toBe(false);
+    expect(tile('EHBO').textContent).toBe('EHBOIn orde');
   });
 
   test('"Alles klopt, naar tekenen" opens the signature screen', async () => {

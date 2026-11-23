@@ -32,6 +32,8 @@ export interface Submission {
   signedAt: string;
   answers: Record<QuestionId, Answer>;
   goodPractice: string;
+  /** JPEG data URLs with "Wat gaat hier goed?". Optional: submissions made before it lack it. */
+  goodPracticePhotos?: string[];
   /** data:image/png;base64,… */
   signature: string;
   declaration: true;
@@ -96,6 +98,7 @@ export const submissionSchema: z.ZodType<Submission> = z
     signedAt: z.iso.datetime({ offset: true }),
     answers: answersSchema,
     goodPractice: z.string().max(LIMITS.goodPractice),
+    goodPracticePhotos: z.array(photo).max(LIMITS.goodPracticePhotos).optional(),
     signature,
     declaration: z.literal(true),
     website: z.string().max(HONEYPOT_MAX).optional(),

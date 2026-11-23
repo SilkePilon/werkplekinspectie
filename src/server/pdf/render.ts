@@ -275,10 +275,13 @@ function drawActionLine(doc: Doc, flow: Flow, sub: Submission): void {
 }
 
 function drawPhotos(doc: Doc, flow: Flow, sub: Submission): void {
-  const photos = QUESTIONS.flatMap((q) => {
-    const a = sub.answers[q.id];
-    return a.answer === 'nee' ? a.photos.map((url) => ({ q, url })) : [];
-  });
+  const photos = [
+    ...QUESTIONS.flatMap((q) => {
+      const a = sub.answers[q.id];
+      return a.answer === 'nee' ? a.photos.map((url) => ({ caption: `${q.id} - ${q.formText}`, url })) : [];
+    }),
+    ...(sub.goodPracticePhotos ?? []).map((url) => ({ caption: GOOD_PRACTICE, url })),
+  ];
   const gap = 20;
   const slotWidth = (CONTENT.width - gap) / 2;
 
@@ -289,10 +292,7 @@ function drawPhotos(doc: Doc, flow: Flow, sub: Submission): void {
       size: SIZE.heading,
       bold: true,
     });
-    const pair = photos.slice(i, i + 2).map((p) => ({
-      ...p,
-      caption: `${p.q.id} - ${p.q.formText}`,
-    }));
+    const pair = photos.slice(i, i + 2);
     const captionHeight = Math.max(
       ...pair.map((p) => textHeight(doc, p.caption, slotWidth, { bold: true })),
     );

@@ -89,18 +89,22 @@ export function SignatureScreen({ draft, dispatch, onSend, busy, onBack, onClose
               <path d="M20 6 9 17l-5-5" />
             </svg>
           </span>
-          <span>{DECLARATION}</span>
+          {/* 24px lines, 2px down: the first line sits centred on the 28px box, also when it wraps. */}
+          <span className="pt-0.5 leading-6">{DECLARATION}</span>
         </label>
       </main>
 
       <footer className="px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
+        {/*
+          Always in the page, so screen readers announce the text when sending starts. Above the
+          button, so the button sits as low as Volgende on every other screen.
+        */}
+        <p role="status" className="mt-0 mb-2 min-h-[1lh] text-center text-[15px] text-sub">
+          {busy ? "Bezig met versturen. Met veel foto's kan dit even duren." : ''}
+        </p>
         <ChunkyButton busy={busy} disabled={isEmpty || !draft.declaration} onClick={send}>
           Verstuur inspectie
         </ChunkyButton>
-        {/* Always in the page, so screen readers announce the text when sending starts. */}
-        <p role="status" className="mt-2 mb-0 min-h-[1lh] text-center text-[15px] text-sub">
-          {busy ? "Bezig met versturen. Met veel foto's kan dit even duren." : ''}
-        </p>
       </footer>
     </>
   );

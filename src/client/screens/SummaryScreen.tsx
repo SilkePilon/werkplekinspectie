@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode, type Ref } from 'react';
-import { formatDayShort } from '@shared/dates';
-import { QUESTIONS, SECTIONS, type QuestionId, type Section } from '@shared/questions';
-import { counts, missingFields, type AnswerValue, type Draft } from '../state/draft';
+import { QUESTIONS, SECTIONS, type Question, type QuestionId } from '@shared/questions';
+import { missingFields, type Draft } from '../state/draft';
 import { ChunkyButton } from '../ui/ChunkyButton';
 import { cn } from '../ui/cn';
 import { TopBar } from '../ui/TopBar';
@@ -22,21 +21,6 @@ export interface SummaryScreenProps {
   onClose: () => void;
 }
 
-const LABELS: Record<AnswerValue, string> = { ja: 'Ja', nee: 'Nee', nvt: 'Nvt' };
-
-/** "2 × Ja, 1 × Nee": only the answers that occur. */
-function sectionCounts(draft: Draft, section: Section): string {
-  const c = { ja: 0, nee: 0, nvt: 0 };
-  for (const q of QUESTIONS) {
-    const value = draft.answers[q.id];
-    if (q.section === section.nr && value) c[value] += 1;
-  }
-  return (['ja', 'nee', 'nvt'] as const)
-    .filter((v) => c[v] > 0)
-    .map((v) => `${c[v]} × ${LABELS[v]}`)
-    .join(', ');
-}
-
 /** Questions that still need work: not answered, or Nee without comment or date. */
 function incompleteQuestions(draft: Draft): Set<QuestionId> {
   const ids = new Set<QuestionId>();
@@ -49,6 +33,33 @@ function incompleteQuestions(draft: Draft): Set<QuestionId> {
 
 const photoCount = (n: number) => (n === 1 ? '1 foto' : `${n} foto's`);
 
+type Tone = 'ok' | 'nee' | 'nvt' | 'open' | 'none';
+
+interface Summary {
+  tone: Tone;
+  text: string;
+  /** The question a tap opens: what needs work first, else a Nee, else the first one. */
+  target: QuestionId;
+}
+
+/** One part of the form in a few words: open beats Nee beats In orde. */
+function summarize(draft: Draft, questions: Question[], incomplete: Set<QuestionId>, highlight?: QuestionId): Summary {
+  const open = questions.find((q) => incomplete.has(q.id));
+  const flagged = questions.find((q) => q.id === highlight);
+  const nee = questions.filter((q) => draft.answers[q.id] === 'nee');
+  const target = (open ?? flagged ?? nee[0] ?? questions[0]!).id;
+  if (open) return { tone: 'open', text: 'Nog niet af', target };
+  if (flagged) return { tone: 'open', text: 'Kijk nog eens', target };
+  if (nee.length > 0) return { tone: 'nee', text: `${nee.length} niet in orde`, target };
+  if (questions.every((q) => draft.answers[q.id] === 'nvt')) return { tone: 'nvt', text: 'Nvt', target };
+  return { tone: 'ok', text: 'In orde', target };
+}
+
+/**
+ * "Klopt alles?": one tile per part of the form, with a summary in a few words, so the whole
+ * inspection fits on one screen. A tile opens the question that needs a look; after a change
+ * the app comes back here.
+ */
 export function SummaryScreen({
   draft,
   onEdit,
@@ -59,113 +70,52 @@ export function SummaryScreen({
   onBack,
   onClose,
 }: SummaryScreenProps) {
-  const ids = { nee: useId(), notes: useId(), all: useId(), why: useId() };
-  const total = counts(draft);
+  const ids = { why: useId() };
   const incomplete = incompleteQuestions(draft);
-  const neeQuestions = QUESTIONS.filter((q) => draft.answers[q.id] === 'nee');
-  // Notes only count on Ja/Nvt; a Nee item shows its own comment on its card.
-  const noteQuestions = QUESTIONS.filter((q) => {
-    const value = draft.answers[q.id];
-    return (value === 'ja' || value === 'nvt') && (draft.notes?.[q.id] ?? '').trim() !== '';
-  });
-  // The highlight sits on the Nee card when there is one, else on the section row.
-  const highlightOnCard = highlight !== undefined && draft.answers[highlight] === 'nee';
-  const marked = useRef<HTMLElement>(null);
+  const marked = useRef<HTMLButtonElement>(null);
   useEffect(() => marked.current?.scrollIntoView?.({ block: 'center' }), []);
+
+  const goodText = draft.goodPractice.trim();
+  const goodPhotos = draft.goodPracticePhotos?.length ?? 0;
+  const good =
+    goodText && goodPhotos ? `Ingevuld · ${photoCount(goodPhotos)}` : goodText ? 'Ingevuld' : goodPhotos ? photoCount(goodPhotos) : 'Niet ingevuld';
 
   return (
     <>
       <TopBar progress={0.95} label="Bijna klaar" onBack={onBack} onClose={onClose} />
 
-      <main className="flex flex-1 flex-col px-[18px] pt-1">
+      <main className="flex flex-1 flex-col px-[18px] pt-1 pb-2">
         <h1 className="mt-2 mb-1 text-[26px] font-black leading-[1.15]">Klopt alles?</h1>
+        <p className="m-0 text-[16px] text-sub">Tik op een onderdeel om het te veranderen.</p>
+
         {tooLarge && (
           <p
             role="alert"
-            className="mt-2 mb-0 rounded-chunky border-2 border-coral bg-roze px-3.5 py-3 text-[15px] font-extrabold text-coral-d motion-safe:animate-rise"
+            className="mt-3 mb-0 rounded-chunky border-2 border-coral bg-roze px-3.5 py-3 text-[15px] font-extrabold text-coral-d motion-safe:animate-rise"
           >
             De inspectie is te groot om te versturen. Verwijder een paar foto&apos;s.
           </p>
         )}
-        <ul className="m-0 mt-3 mb-4 flex list-none gap-2 p-0">
-          {(['ja', 'nee', 'nvt'] as const).map((v) => (
-            <li
-              key={v}
-              className={cn(
-                'rounded-full border-2 border-grey px-3 py-1 text-[14px] font-extrabold',
-                v === 'nee' && total.nee > 0 && 'border-coral bg-roze text-coral-d',
-              )}
-            >
-              {`${total[v]} × ${LABELS[v]}`}
-            </li>
-          ))}
-        </ul>
 
-        {neeQuestions.length > 0 && (
-          <section aria-labelledby={ids.nee}>
-            <SectionTitle id={ids.nee}>Niet in orde</SectionTitle>
-            <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
-              {neeQuestions.map((q) => (
-                <NeeCard
-                  key={q.id}
-                  draft={draft}
-                  id={q.id}
-                  text={q.appText}
-                  incomplete={incomplete.has(q.id)}
-                  highlighted={highlightOnCard && q.id === highlight}
-                  markRef={marked}
-                  onEdit={onEdit}
+        <ul className="m-0 mt-4 grid list-none grid-cols-2 gap-2.5 p-0">
+          {SECTIONS.map((s) => {
+            const sum = summarize(draft, QUESTIONS.filter((q) => q.section === s.nr), incomplete, highlight);
+            return (
+              <li key={s.nr} className="flex">
+                <Tile
+                  title={s.title}
+                  tone={sum.tone}
+                  status={sum.text}
+                  markRef={sum.target === highlight ? marked : undefined}
+                  onClick={() => onEdit(sum.target)}
                 />
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {noteQuestions.length > 0 && (
-          <section aria-labelledby={ids.notes}>
-            <SectionTitle id={ids.notes}>Opmerkingen</SectionTitle>
-            <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
-              {noteQuestions.map((q) => (
-                <li key={q.id}>
-                  <Row title={`${q.id} ${q.appText}`} highlighted={false} onClick={() => onEdit(q.id)}>
-                    <span className="line-clamp-2 break-words">{`${LABELS[draft.answers[q.id]!]}: ${draft.notes![q.id]!.trim()}`}</span>
-                  </Row>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section aria-labelledby={ids.all}>
-          <SectionTitle id={ids.all}>Alle onderdelen</SectionTitle>
-          <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
-            {SECTIONS.map((s) => {
-              const questions = QUESTIONS.filter((q) => q.section === s.nr);
-              const open = questions.find((q) => incomplete.has(q.id));
-              const flagged = !highlightOnCard ? questions.find((q) => q.id === highlight) : undefined;
-              return (
-                <li key={s.nr}>
-                  {/* An incomplete or highlighted section opens at the question that needs work. */}
-                  <Row
-                    title={`${s.nr} ${s.title}`}
-                    highlighted={flagged !== undefined}
-                    markRef={marked}
-                    onClick={() => onEdit((open ?? flagged ?? questions[0]!).id)}
-                  >
-                    {sectionCounts(draft, s)}
-                    {open && <NotComplete />}
-                    {flagged && <LookAgain />}
-                  </Row>
-                </li>
-              );
-            })}
-            <li>
-              <Row title="Wat gaat hier goed?" highlighted={false} onClick={onEditGoodPractice}>
-                <span className="line-clamp-2">{draft.goodPractice.trim() || 'Niet ingevuld'}</span>
-              </Row>
-            </li>
-          </ul>
-        </section>
+              </li>
+            );
+          })}
+          <li className="flex">
+            <Tile title="Wat gaat hier goed?" tone="none" status={good} onClick={onEditGoodPractice} />
+          </li>
+        </ul>
       </main>
 
       <footer className="sticky bottom-0 bg-white px-[18px] pt-4 pb-[calc(22px+env(safe-area-inset-bottom))]">
@@ -188,123 +138,64 @@ export function SummaryScreen({
   );
 }
 
-function SectionTitle({ id, children }: { id: string; children: ReactNode }) {
-  return (
-    <h2 id={id} className="mx-0.5 mt-4 mb-2 text-[15px] font-black text-sub">
-      {children}
-    </h2>
-  );
-}
+// Every tile is plain white; only the summary line takes the colour of the Ja / Nee / Nvt answers.
+const STATUS: Record<Tone, string> = {
+  ok: 'text-brand-d',
+  nee: 'text-coral-d',
+  nvt: 'text-sub',
+  open: 'text-coral-d',
+  none: 'text-sub',
+};
 
-interface NeeCardProps {
-  draft: Draft;
-  id: QuestionId;
-  text: string;
-  incomplete: boolean;
-  highlighted: boolean;
-  markRef: Ref<HTMLElement>;
-  onEdit: (id: QuestionId) => void;
-}
+const MARK: Record<Tone, string> = {
+  ok: 'bg-brand text-white',
+  nee: 'bg-coral text-white',
+  nvt: 'border-2 border-grey-d bg-white text-ink',
+  open: 'bg-coral text-white',
+  none: '',
+};
 
-function NeeCard({ draft, id, text, incomplete, highlighted, markRef, onEdit }: NeeCardProps) {
-  const titleId = useId();
-  const details = draft.nee[id];
-  const comment = details?.comment.trim() ?? '';
-  const meta = [
-    details?.actionBefore ? `Vóór ${formatDayShort(details.actionBefore)}` : null,
-    photoCount(details?.photos.length ?? 0),
-  ]
-    .filter(Boolean)
-    .join(', ');
+const MARK_PATH: Record<Tone, ReactNode> = {
+  ok: <path d="M20 6 9 17l-5-5" />,
+  nee: <path d="M6 6l12 12M18 6L6 18" />,
+  nvt: <path d="M6 12h12" />,
+  open: <path d="M12 6v7M12 17.5v.01" />,
+  none: null,
+};
 
-  return (
-    <li
-      ref={highlighted ? (markRef as Ref<HTMLLIElement>) : undefined}
-      className={cn(
-        'rounded-chunky border-2 border-b-5 border-coral bg-roze px-3.5 py-3',
-        highlighted && 'outline-solid outline-3 outline-offset-2 outline-coral-d',
-      )}
-    >
-      <p id={titleId} className="m-0 text-[17px] font-black leading-[1.25]">
-        {`${id} ${text}`}
-      </p>
-      {comment && <p className="mt-1 mb-0 text-[15px] break-words">{comment}</p>}
-      {incomplete && <NotComplete />}
-      {highlighted && <LookAgain />}
-      <div className="mt-2 flex items-center justify-between gap-3 text-[14px] font-extrabold text-coral-d">
-        <span>{meta}</span>
-        <button
-          type="button"
-          aria-describedby={titleId}
-          onClick={() => onEdit(id)}
-          className="-my-2 -mr-2 flex min-h-11 items-center gap-1 rounded-chunky px-2 text-[15px] font-black text-brand-d hover:bg-white focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-brand-d motion-safe:transition-colors"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
-          </svg>
-          Aanpassen
-        </button>
-      </div>
-    </li>
-  );
-}
-
-/** Icon plus text: the state never depends on colour alone. */
-function NotComplete() {
-  return (
-    <span className="mt-1.5 flex items-center gap-1.5 text-[15px] font-extrabold text-coral-d">
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7.5v5.5M12 16.5v.01" />
-      </svg>
-      Nog niet compleet
-    </span>
-  );
-}
-
-/** Where the server found a problem. Icon plus text, like NotComplete. */
-function LookAgain() {
-  return (
-    <span className="mt-1.5 flex items-center gap-1.5 text-[15px] font-extrabold text-coral-d">
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </svg>
-      Kijk hier nog eens naar.
-    </span>
-  );
-}
-
-interface RowProps {
+interface TileProps {
   title: string;
-  highlighted: boolean;
-  markRef?: Ref<HTMLElement>;
+  tone: Tone;
+  status: string;
+  markRef?: Ref<HTMLButtonElement>;
   onClick: () => void;
-  children: ReactNode;
 }
 
-function Row({ title, highlighted, markRef, onClick, children }: RowProps) {
+/** A part of the form: its name and, below it, how it went. Sinks when pressed, like the answers. */
+function Tile({ title, tone, status, markRef, onClick }: TileProps) {
   return (
     <button
       type="button"
-      ref={highlighted ? (markRef as Ref<HTMLButtonElement>) : undefined}
+      ref={markRef}
       onClick={onClick}
       className={cn(
-        'group flex w-full items-center justify-between gap-3 rounded-chunky border-2 border-b-5 bg-white px-3.5 py-3 text-left',
-        highlighted ? 'border-coral' : 'border-grey hover:border-grey-d',
-        'hover:bg-[#fafafa]',
+        'flex min-h-[78px] w-full flex-col justify-between gap-1.5 rounded-chunky border-2 border-b-5 px-3 py-2.5 text-left',
         'focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-brand-d',
-        'enabled:active:translate-y-[3px] enabled:active:border-b-2 motion-safe:transition-[translate,background-color,border-color]',
+        'border-grey bg-white hover:border-grey-d hover:bg-[#fafafa]',
+        'active:translate-y-[3px] active:border-b-2 motion-safe:transition-[translate,background-color,border-color]',
       )}
     >
-      <span className="min-w-0">
-        <span className="block text-[17px] font-black">{title}</span>
-        <span className="block text-[14px] font-bold text-sub">{children}</span>
+      <span className="text-[16px] font-black leading-tight break-words text-ink hyphens-auto">{title}</span>
+      <span className={cn('flex items-center gap-1.5 text-[14px] font-extrabold leading-tight', STATUS[tone])}>
+        {tone !== 'none' && (
+          <span aria-hidden="true" className={cn('grid size-5 shrink-0 place-items-center rounded-[6px]', MARK[tone])}>
+            <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round">
+              {MARK_PATH[tone]}
+            </svg>
+          </span>
+        )}
+        {status}
       </span>
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="size-[22px] shrink-0 text-mute group-hover:text-sub motion-safe:transition-[color,translate] motion-safe:group-hover:translate-x-0.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m9 18 6-6-6-6" />
-      </svg>
     </button>
   );
 }

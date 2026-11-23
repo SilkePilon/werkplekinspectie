@@ -75,7 +75,7 @@ describe('update banner', () => {
     pwa.needRefresh = true;
     const user = userEvent.setup();
     await startScreen();
-    await user.type(screen.getByLabelText('Naam'), 'J. Jansen');
+    await user.type(screen.getByLabelText('Jouw naam'), 'J. Jansen');
     await user.type(screen.getByLabelText('Project'), 'Voorbeeld B.V.');
     await user.type(screen.getByLabelText('Projectnummer'), 'P-1');
     await user.click(screen.getByRole('button', { name: 'Start inspectie' }));

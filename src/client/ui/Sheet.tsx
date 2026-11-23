@@ -2,15 +2,11 @@ import * as Dialog from '@radix-ui/react-dialog';
 import type { ReactNode } from 'react';
 import { cn } from './cn';
 
-export type SheetTone = 'default' | 'nee';
-
 export interface SheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Visible heading; also the dialog's accessible name. */
   title: ReactNode;
-  /** 'nee' marks the title with the red cross, used after answering Nee. */
-  tone?: SheetTone;
   children: ReactNode;
   className?: string;
 }
@@ -19,8 +15,7 @@ export interface SheetProps {
  * Bottom sheet on top of Radix Dialog: focus is trapped inside, Escape and a
  * tap on the dimmed backdrop close it, and the title names the dialog.
  */
-export function Sheet({ open, onOpenChange, title, tone = 'default', children, className }: SheetProps) {
-  const nee = tone === 'nee';
+export function Sheet({ open, onOpenChange, title, children, className }: SheetProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -47,21 +42,7 @@ export function Sheet({ open, onOpenChange, title, tone = 'default', children, c
             className,
           )}
         >
-          <Dialog.Title
-            className={cn(
-              'm-0 mb-3 flex items-center gap-2.5 text-[22px] font-black leading-tight',
-              nee ? 'text-coral-d' : 'text-ink',
-            )}
-          >
-            {nee && (
-              <span aria-hidden="true" className="grid size-[34px] shrink-0 place-items-center rounded-full bg-coral text-white">
-                <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
-              </span>
-            )}
-            {title}
-          </Dialog.Title>
+          <Dialog.Title className="m-0 mb-3 text-[22px] font-black leading-tight text-ink">{title}</Dialog.Title>
           {children}
         </Dialog.Content>
       </Dialog.Portal>

@@ -338,6 +338,14 @@ describe('POST /api/inspecties', () => {
     expect(res.json()).toEqual({ status: 'ongeldig', fields: ['signature'] });
   });
 
+  test('a bad good-practice photo gives 400 naming it', async () => {
+    const { app, mailer } = await setup();
+    const res = await post(app, makeSubmission({ goodPracticePhotos: [JPEG_DATA_URL, `data:image/jpeg;base64,${GIF_1X1}`] }));
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ status: 'ongeldig', fields: ['goodPracticePhotos.1'] });
+    expect(mailer.sent).toHaveLength(0);
+  });
+
   test('a valid PNG photo is refused: photos are JPEG only', async () => {
     const { app, mailer } = await setup();
     const res = await post(app, with4B({ photos: [PNG_DATA_URL] }));

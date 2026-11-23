@@ -12,6 +12,8 @@ export const LIMITS = {
   goodPractice: TEXT_MAX,
   photosPerItem: 3,
   photosTotal: 15,
+  /** Photos with "Wat gaat hier goed?"; apart from the 15 with the Nee answers. */
+  goodPracticePhotos: 3,
   photoBytes: 1_500_000,
   signatureBytes: 300_000,
   bodyBytes: 12_000_000,

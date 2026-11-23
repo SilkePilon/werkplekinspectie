@@ -431,9 +431,9 @@ describe('result screens', () => {
     await user.click(button('Aanpassen'));
 
     expect(await screen.findByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
-    const card = screen.getByText(/^4B /).closest('li')!;
-    expect(within(card).getByText('Kijk hier nog eens naar.')).toBeTruthy();
-    expect(screen.getAllByText('Kijk hier nog eens naar.')).toHaveLength(1);
+    // 4B is complete, so the server's complaint is what marks Brandpreventie.
+    expect(screen.getByRole('button', { name: /^Brandpreventie/ }).textContent).toBe('BrandpreventieKijk nog eens');
+    expect(screen.getAllByText('Kijk nog eens')).toHaveLength(1);
     expect(await listOutbox()).toEqual([]);
     const back = await draftOnDisk();
     expect(back).toMatchObject({ id: d.id, declaration: false, answers: { '4B': 'nee' } });
@@ -457,8 +457,7 @@ describe('result screens', () => {
     await user.click(await readyToSend(user));
     await user.click(await screen.findByRole('button', { name: 'Aanpassen' }));
     expect(await screen.findByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
-    const card = screen.getByText(/^4B /).closest('li')!;
-    expect(within(card).getByText('Kijk hier nog eens naar.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Brandpreventie/ }).textContent).toBe('BrandpreventieKijk nog eens');
   });
 
   test('400 ongeldig on a field outside the questions: the summary opens without a highlight', async () => {
@@ -468,7 +467,7 @@ describe('result screens', () => {
     await user.click(await readyToSend(user));
     await user.click(await screen.findByRole('button', { name: 'Aanpassen' }));
     expect(await screen.findByRole('heading', { name: 'Klopt alles?' })).toBeTruthy();
-    expect(screen.queryByText('Kijk hier nog eens naar.')).toBeNull();
+    expect(screen.queryByText('Kijk nog eens')).toBeNull();
   });
 
   test('400 from the outbox while another inspection is open: says so, and that draft is never overwritten', async () => {
@@ -560,7 +559,7 @@ describe('start screen outbox', () => {
     inspecties = () => new Promise((resolve) => (answer = resolve));
     await outboxItem('Ander project');
     render(<App />);
-    await user.type(await screen.findByLabelText('Naam'), 'J. Jansen');
+    await user.type(await screen.findByLabelText('Jouw naam'), 'J. Jansen');
     await user.type(screen.getByLabelText('Project'), 'Voorbeeld B.V.');
     await user.type(screen.getByLabelText('Projectnummer'), 'P-1');
     expect(button('Start inspectie').disabled).toBe(false);
@@ -573,7 +572,7 @@ describe('start screen outbox', () => {
 
     await act(async () => answer(new Response(JSON.stringify({ status: 'verzonden' }), { status: 200 })));
     await user.click(await screen.findByRole('button', { name: 'Klaar' }));
-    await user.type(await screen.findByLabelText('Naam'), 'J. Jansen');
+    await user.type(await screen.findByLabelText('Jouw naam'), 'J. Jansen');
     await user.type(screen.getByLabelText('Project'), 'Voorbeeld B.V.');
     await user.type(screen.getByLabelText('Projectnummer'), 'P-1');
     expect(button('Start inspectie').disabled).toBe(false);

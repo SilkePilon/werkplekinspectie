@@ -172,8 +172,16 @@ function imageChecks(sub: Submission): ImageCheck[] {
       maxHeight: PHOTO_MAX_PX,
     }));
   });
+  const goodPractice = (sub.goodPracticePhotos ?? []).map((url, i) => ({
+    path: `goodPracticePhotos.${i}`,
+    url,
+    maxBytes: LIMITS.photoBytes,
+    maxWidth: PHOTO_MAX_PX,
+    maxHeight: PHOTO_MAX_PX,
+  }));
   return [
     ...photos,
+    ...goodPractice,
     {
       path: 'signature',
       url: sub.signature,

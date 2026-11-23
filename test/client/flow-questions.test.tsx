@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { clear, createStore } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { addDays, amsterdamDateKey, formatDayLong } from '@shared/dates';
+import { amsterdamDateKey, formatDayLong } from '@shared/dates';
 import { QUESTION_IDS, type QuestionId } from '@shared/questions';
 import type { Submission } from '@shared/schema';
 import { App } from '../../src/client/App';
@@ -22,8 +22,10 @@ const Q1C = 'Heb je een veiligheidsinstructie van de opdrachtgever gekregen?';
 const Q9B = 'Is er iemand met een EHBO-diploma?';
 const FUTURE = '2099-12-31';
 const todayKey = () => amsterdamDateKey(new Date().toISOString());
-/** Today's day in the calendar of the open Nee sheet. */
-const todayButton = (dialog: HTMLElement) => within(dialog).getByRole('button', { name: /, vandaag$/ });
+/** The date field of the open Nee sheet: the phone's own date picker. */
+const dateInput = (dialog: HTMLElement) => within(dialog).getByLabelText('Opgelost vóór') as HTMLInputElement;
+/** Picks today in the open Nee sheet, as the phone's date picker would. */
+const pickToday = (dialog: HTMLElement) => fireEvent.change(dateInput(dialog), { target: { value: todayKey() } });
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==';
 
 type Fetch = (input: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
@@ -93,7 +95,7 @@ async function resume(user: ReturnType<typeof setup>) {
 }
 
 async function fillStart(user: ReturnType<typeof setup>) {
-  await user.type(await screen.findByLabelText('Naam'), 'J. Jansen');
+  await user.type(await screen.findByLabelText('Jouw naam'), 'J. Jansen');
   await user.type(screen.getByLabelText('Project'), 'Voorbeeld B.V.');
   await user.type(screen.getByLabelText('Projectnummer'), 'P-1');
 }
@@ -134,7 +136,7 @@ describe('question flow', () => {
     expect(screen.getByText(Q1B)).toBeTruthy();
 
     await user.type(within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }), 'Geen plan aanwezig');
-    await user.click(todayButton(dialog));
+    pickToday(dialog);
     await user.click(button('Doorgaan', dialog));
     // Doorgaan closes the sheet; Volgende moves on.
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -280,11 +282,11 @@ describe('question flow', () => {
     render(<App />);
     await user.click(await screen.findByRole('button', { name: 'Verder gaan' }));
     await user.click(await screen.findByRole('button', { name: 'Overslaan' }));
-    const card = (await screen.findByText(/^1A /)).closest('li')!;
-    expect(within(card).getByText('Nog niet compleet')).toBeTruthy();
+    const card = await screen.findByRole('button', { name: /^Instructie/ });
+    expect(card.textContent).toBe('InstructieNog niet af');
     expect(button('Alles klopt, naar tekenen').disabled).toBe(true);
 
-    await user.click(button('Aanpassen', card));
+    await user.click(card);
     await settle();
     await user.click(button('Volgende'));
     expect(neeDialog()).toBeTruthy();
@@ -306,40 +308,47 @@ describe('question flow', () => {
     expect(neeDialog()).toBeTruthy();
   });
 
-  test('the date picker: a calendar from today on; earlier days cannot be chosen', async () => {
+  test('the date field: the phone\'s own picker, from the inspection day on, shown in words', async () => {
     const user = setup();
     const d = await seed({});
     const min = amsterdamDateKey(d.startedAt);
     await resume(user);
     await user.click(screen.getByText('Nee'));
     const dialog = neeDialog();
-    expect(within(dialog).getByRole('group', { name: 'Opgelost vóór' })).toBeTruthy();
+    // Plain black title, no red cross.
+    expect(within(dialog).getByRole('heading', { name: 'Wat is er mis?' }).className).toContain('text-ink');
     // Photos are optional, and the button says so to screen readers too.
     const photo = button('Foto toevoegen', dialog);
     const described = photo.getAttribute('aria-describedby')!.split(' ').map((id) => document.getElementById(id)?.textContent);
     expect(described).toContain('Niet verplicht');
-    const grid = within(dialog).getByRole('grid');
-    expect(within(dialog).getByRole('button', { name: 'Vorige maand' })).toHaveProperty('disabled', true);
-    const today = todayButton(dialog);
-    expect(today.getAttribute('data-date')).toBe(min);
-    // A day before today is there but cannot be chosen; the arrow keys stop at today.
-    const before = grid.querySelector<HTMLButtonElement>(`[data-date="${addDays(min, -1)}"]`);
-    if (before) {
-      expect(before.getAttribute('aria-disabled')).toBe('true');
-      await user.click(before);
-      expect(grid.querySelector('[aria-selected="true"]')).toBeNull();
-    }
-    today.focus();
-    await user.keyboard('{ArrowLeft}');
-    expect(document.activeElement).toBe(today);
+
+    const input = dateInput(dialog);
+    expect(input.type).toBe('date');
+    expect(input.min).toBe(todayKey() > min ? todayKey() : min);
+    expect(within(dialog).getByText('Kies een datum')).toBeTruthy();
 
     await user.type(within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }), 'Kapot');
-    await user.click(today);
-    expect(today.closest('td')!.getAttribute('aria-selected')).toBe('true');
+    pickToday(dialog);
+    const words = formatDayLong(todayKey());
+    expect(within(dialog).getByText(words)).toBeTruthy();
     await user.click(button('Doorgaan', dialog));
     expect(screen.queryByRole('dialog')).toBeNull();
     await user.click(button('Volgende'));
     expect(screen.getByText(Q1B)).toBeTruthy();
+  });
+
+  test('a date typed before today is refused', async () => {
+    const user = setup();
+    await seed({});
+    await resume(user);
+    await user.click(screen.getByText('Nee'));
+    const dialog = neeDialog();
+    await user.type(within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }), 'Kapot');
+    fireEvent.change(dateInput(dialog), { target: { value: '2020-01-01' } });
+    await user.click(button('Doorgaan', dialog));
+    expect(within(dialog).getByText('Kies een datum vanaf vandaag.')).toBeTruthy();
+    expect(dateInput(dialog).getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(dateInput(dialog));
   });
 
   test('a blank comment is refused and the remaining length shows near the limit', async () => {
@@ -351,7 +360,7 @@ describe('question flow', () => {
     const comment = within(dialog).getByRole('textbox', { name: 'Wat is er mis?' }) as HTMLTextAreaElement;
     expect(comment.maxLength).toBe(250);
     fireEvent.change(comment, { target: { value: '   ' } });
-    await user.click(todayButton(dialog));
+    pickToday(dialog);
     await user.click(button('Doorgaan', dialog));
     expect(within(dialog).getByText('Schrijf kort op wat er mis is.')).toBeTruthy();
     expect(within(dialog).queryByText(/tekens over/)).toBeNull();
@@ -445,10 +454,10 @@ describe('question flow', () => {
     expect(screen.queryByRole('button', { name: 'Opmerking toevoegen' })).toBeNull();
   });
 
-  test('the summary lists Ja/Nvt comments and opens the question to change one', async () => {
+  test('from the summary a Ja/Nvt comment can be changed on its question', async () => {
     const user = setup();
     const d = await seed(allJaExcept());
-    await saveDraft({ ...d, notes: { '4B': 'Gekeurd in oktober' } });
+    await saveDraft({ ...d, notes: { '4A': 'Twee blussers bij de ingang' } });
     render(<App />);
     await screen.findByText('Je bent nog bezig met een inspectie');
     const state = { screen: { name: 'summary' } };
@@ -456,10 +465,9 @@ describe('question flow', () => {
       history.pushState(state, '');
       dispatchEvent(new PopStateEvent('popstate', { state }));
     });
-    const section = screen.getByRole('region', { name: 'Opmerkingen' });
-    await user.click(within(section).getByRole('button', { name: /Gekeurd in oktober/ }));
-    expect(screen.getByText('Zijn de blusmiddelen gekeurd?')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Aanpassen/ })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Brandpreventie/ }));
+    expect(screen.getByText('Zijn er blusmiddelen, en kun je erbij?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Aanpassen/ }).textContent).toContain('Twee blussers bij de ingang');
   });
 
   test('the back arrow goes one question back, keeps the answer, and is not on the first question', async () => {
@@ -517,7 +525,7 @@ describe('question flow', () => {
       history.pushState(state, '');
       dispatchEvent(new PopStateEvent('popstate', { state }));
     });
-    await user.click(screen.getByRole('button', { name: /^4 Brandpreventie/ }));
+    await user.click(screen.getByRole('button', { name: /^Brandpreventie/ }));
     expect(screen.getByText('Zijn er blusmiddelen, en kun je erbij?')).toBeTruthy();
     await user.click(button('Vorige'));
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Klopt alles?' })).toBeTruthy());
@@ -655,8 +663,12 @@ describe('start screen', () => {
   test('the keyboard key goes to the next field; on the last one it starts once all is filled in', async () => {
     const user = setup();
     render(<App />);
-    const naam = await screen.findByLabelText('Naam');
+    const naam = await screen.findByLabelText('Jouw naam');
     expect(naam.getAttribute('enterkeyhint')).toBe('next');
+    // Says it is the technician's own name, and comes before the question about the place.
+    expect(naam.getAttribute('placeholder')).toBe('Voor- en achternaam');
+    const where = screen.getByText('Waar doe je vandaag de inspectie?');
+    expect(naam.compareDocumentPosition(where) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await user.type(naam, 'J. Jansen{Enter}');
     expect(document.activeElement).toBe(screen.getByLabelText('Project'));
     await user.keyboard('Voorbeeld B.V.{Enter}');
@@ -678,7 +690,7 @@ describe('start screen', () => {
 
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
     const second = render(<App />);
-    await screen.findByLabelText('Naam');
+    await screen.findByLabelText('Jouw naam');
     expect(screen.getByRole('heading', { name: 'Werkplekinspectie' })).toBeTruthy();
     expect(second.container.querySelector('img')).toBeNull();
   });
@@ -688,9 +700,9 @@ describe('start screen', () => {
     const user = setup();
     render(<App />);
     expect(await screen.findByText('Hoi J. Jansen!')).toBeTruthy();
-    expect(screen.queryByLabelText('Naam')).toBeNull();
+    expect(screen.queryByLabelText('Jouw naam')).toBeNull();
     await user.click(button('Naam aanpassen'));
-    const naam = screen.getByLabelText('Naam') as HTMLInputElement;
+    const naam = screen.getByLabelText('Jouw naam') as HTMLInputElement;
     expect(naam.value).toBe('J. Jansen');
     // Every text field stops at 250 characters.
     expect(naam.maxLength).toBe(250);
@@ -712,7 +724,7 @@ describe('start screen', () => {
   test('blank fields keep Start disabled', async () => {
     const user = setup();
     render(<App />);
-    await user.type(await screen.findByLabelText('Naam'), '   ');
+    await user.type(await screen.findByLabelText('Jouw naam'), '   ');
     await user.type(screen.getByLabelText('Project'), 'X');
     await user.type(screen.getByLabelText('Projectnummer'), 'P-1');
     expect(button('Start inspectie').disabled).toBe(true);
